@@ -23,7 +23,7 @@
 
       <div class="campo-grupo">
         <label for="codigoProduto">Código do Produto:</label>
-        <input type="number" id="codigoProduto" placeholder="00000" required>
+        <input type="number" step="0" id="codigoProduto" placeholder="00000" required>
       </div>
 
       <div class="campo-grupo">
@@ -55,12 +55,12 @@
 
       <div class="campo-grupo">
         <label for="precoCusto">Preço de Custo (R$):</label>
-        <input type="number" step="0.01" id="precoCusto" placeholder="Ex: 10,00">
+        <input type="text" step="" id="precoCusto" placeholder="Ex: 10,00">
       </div>
 
       <div class="campo-grupo">
         <label for="precoVenda">Preço de Venda (R$):</label>
-        <input type="number" step="0.01" id="precoVenda" placeholder="Ex: 15,00" required>
+        <input type="text" step="" id="precoVenda" placeholder="Ex: 15,00" required>
       </div>
 
       <div class="campo-grupo">
@@ -69,7 +69,8 @@
       </div>
 
       <div class="campo-grupo full-width">
-        <button type="submit" class="btn-salvar">Salvar Produto</button>
+        <button type="submit" id="btnSalvar" class="btn-salvar">Salvar Produto</button>
+        
       </div>
 
     </form>
@@ -77,7 +78,7 @@
     <div class="secao-lista">
       <div class="lista-header">
         <h3>Produtos Cadastrados</h3>
-        <span id="totalProdutos" class="contador-total">Total de Produtos: 1</span>
+        <span id="totalProdutos" type = "number" class="contador-total">Total de Produtos: <span id="numeroProdutos" > 0</span></span>
       </div>
 
       <div class="tabela-responsive">
@@ -111,7 +112,7 @@
     </div>
 
   </div>
-
+<script src="front.js" ></script>
 </body>
 
 </html>
