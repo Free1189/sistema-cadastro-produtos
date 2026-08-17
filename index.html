@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Registro de Produto - Marau Luz e Água</title>
+</head>
+
+<body>
+
+  <div class="container-card">
+
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Sistema Cadastro de produtos</p>
+    </header>
+
+    <h2 class="titulo-pagina">Cadastro do novo produto</h2>
+
+    <form class="form-grid">
+
+      <div class="campo-grupo">
+        <label for="codigoProduto">Código do Produto:</label>
+        <input type="number" step="0" id="codigoProduto" placeholder="00000" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="nomeProduto">Nome do Produto:</label>
+        <input type="text" id="nomeProduto" placeholder="Ex: Cabo flexível 1,5 mm" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="categoria">Categoria:</label>
+        <select id="categoria" name="categoria" required>
+          <option value="eletrico">Elétrico</option>
+          <option value="hidraulico">Hidráulico</option>
+          <option value="outros">Outros</option>
+        </select>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="unidadeVenda">Unidade de Venda:</label>
+        <select id="unidadeVenda" name="unidadeVenda" required>
+          <option value="unidade">Unidade</option>
+          <option value="metros">Metros</option>
+        </select>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="estoque">Estoque:</label>
+        <input type="number" id="estoque" placeholder="Ex: 100" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="precoCusto">Preço de Custo (R$):</label>
+        <input type="text" step="" id="precoCusto" placeholder="Ex: 10,00">
+      </div>
+
+      <div class="campo-grupo">
+        <label for="precoVenda">Preço de Venda (R$):</label>
+        <input type="text" step="" id="precoVenda" placeholder="Ex: 15,00" required>
+      </div>
+
+      <div class="campo-grupo">
+        <label for="ncm">NCM / FISCAL:</label>
+        <input type="text" id="ncm" placeholder="Ex: 0000.00.00" maxlength="12" >
+      </div>
+
+      <div class="campo-grupo full-width">
+        <button type="submit" id="btnSalvar" class="btn-salvar">Salvar Produto</button>
+        
+      </div>
+
+    </form>
+
+    <div class="secao-lista">
+      <div class="lista-header">
+        <h3>Produtos Cadastrados</h3>
+        <span id="totalProdutos" type = "number" class="contador-total">Total de Produtos: <span id="numeroProdutos" > 0</span></span>
+      </div>
+
+      <div class="tabela-responsive">
+        <table class="tabela-produtos">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Nome do Produto</th>
+              <th>Categoria</th>
+              <th>Unidade</th>
+              <th>Estoque</th>
+              <th>P. Custo</th>
+              <th>P. Venda</th>
+              <th>NCM/FISCAL</th>
+            </tr>
+          </thead>
+          <tbody id="listaProdutos">
+            <tr>
+              <td><strong>00001</strong></td>
+              <td>Cabo Flexível 1,5 mm</td>
+              <td>Elétrico</td>
+              <td>Metros</td>
+              <td>100</td>
+              <td>R$ 10,00</td>
+              <td>R$ 15,00</td>
+              <td>8544.49.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+<script src="front.js" ></script>
+</body>
+
+</html>
