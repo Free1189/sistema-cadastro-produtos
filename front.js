@@ -256,14 +256,18 @@ form.addEventListener('submit', async (e) => {
 
   const inputs = form.querySelectorAll('input, select');
 
-  
-  const novoProduto = {
-    nome: inputs[0].value,
-    categoria: inputs[1].value,
-    preco: parseFloat(inputs[4].value) || parseFloat(inputs[3].value) || 0,
-    quantidade: parseInt(inputs[2].value)  || 0,
+  const nome = document.getElementById('nome').value.trim();
+  const categoria = document.getElementById('categoria').value.trim();
+  const preco = parseFloat(document.getElementById('preco').value);
+  const quantidade = parseInt(document.getElementById('quantidade').value);
 
+  if (!name || !categoria ||  categoria <= 0 || isNaN(quantidade )|| !quantidade || isNaN(preco) || preco <=0 ){
+    alert ("Por favor ensira os números necessarios para a finalização do cadastro dos produtos ! ")
+    return;
+  }
+  const novoProduto = { nome, categoria, preco, quantidade
   };
+
 
   try {
     const resposta = await fetch(API_URL, {
