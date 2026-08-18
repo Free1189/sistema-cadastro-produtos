@@ -212,3 +212,76 @@ precoCusto.addEventListener('blur', formatacaonumero);
 precoVenda.addEventListener('blur', formatacaonumero);
 
 
+const API_URL = 'http://localhost:3000/produtos';
+
+const form = document.querySelector('form');
+const tabela = document.querySelector('tbody');
+
+// carrega o produto do bd na tabela 
+
+async function carregarProdutos() {
+  try {
+    const resposta = await fetch(API_URL);
+    const produtos = await resposta.json();
+
+    tabela.innerHTML = '';
+
+    produtos.forEach(prod => {
+      const linha = document.createElement('tr');
+      linha.innerHTML = `
+                <td>${prod.id}</td>
+                <td>${prod.nome}</td>
+                <td>${prod.categoria}</td>
+                <td>${prod.unidade || 'Unidade'}</td>
+                <td>${prod.quantidade}</td>
+                <td>R$ ${parseFloat(prod.preco).toFixed(2)}</td>
+                <td>R$ ${parseFloat(prod.preco).toFixed(2)}</td>
+                <td>${prod.ncm || '-'}</td>
+                <td>
+                    <button type="button">Editar</button>
+                    <button type="button">Excluir</button>
+                </td>
+            `;
+      tabela.appendChild(linha);
+    });
+  } catch (erro) {
+    console.error('Erro ao carregar produtos:', erro);
+  }
+}
+
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+
+  const inputs = form.querySelectorAll('input, select');
+
+  
+  const novoProduto = {
+    nome: inputs[0].value,
+    categoria: inputs[1].value,
+    preco: parseFloat(inputs[4].value) || parseFloat(inputs[3].value) || 0,
+    quantidade: parseInt(inputs[2].value)  || 0,
+
+  };
+
+  try {
+    const resposta = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(novoProduto)
+    });
+
+    if (resposta.ok) {
+      form.reset();
+      carregarProdutos();
+    } else {
+      alert('Erro ao cadastrar produto.');
+    }
+  } catch (erro) {
+    console.error('Erro ao enviar produto:', erro);
+  }
+});
+
+carregarProdutos();
+
