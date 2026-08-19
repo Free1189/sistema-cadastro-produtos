@@ -30,12 +30,14 @@ app.get('/produtos', async (req, res) => {
 });
 
 app.post('/produtos', async (req, res) => {
-  const { nome, categoria, preco, quantidade } = req.body;
+  const { nome, categoria, precoCusto, precoVenda, estoque, ncm } = req.body;
   try {
-    const queryText = 'INSERT INTO produtos (nome, categoria, preco, quantidade) VALUES ($1, $2, $3,$4) RETURNIGN*';
-    const novosValores = [nome, categoria, preco, quantidade];
-    const resultado = await db.query(queryText, novosValores);
-    res.status(201).json(resultado.rowCount[0]);
+    const queryText = `INSERT INTO produtos (nome, categoria, "precoCusto", "precoVenda", estoque, ncm)
+      VALUES ($1, $2, $3, $4, $5, $6)`;
+
+    const novosValores = [nome, categoria, precoCusto, precoVenda, estoque, ncm];
+    await db.query(queryText, novosValores);
+    res.status(201).json({ nome, categoria, precoCusto, precoVenda, estoque, ncm });
 
   }
   catch (err) {
