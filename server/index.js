@@ -31,22 +31,98 @@ app.get('/produtos', async (req, res) => {
 
 app.post('/produtos', async (req, res) => {
   const { nome, categoria, precoCusto, precoVenda, estoque, ncm } = req.body;
+  const estoqueFormatado = Number.parseInt(estoque, 10);
+
   try {
-    const queryText = `INSERT INTO produtos (nome, categoria, "precoCusto", "precoVenda", estoque, ncm)
-      VALUES ($1, $2, $3, $4, $5, $6)`;
+    const cliente = await db.connect();
 
-    const novosValores = [nome, categoria, precoCusto, precoVenda, estoque, ncm];
-    await db.query(queryText, novosValores);
-    res.status(201).json({ nome, categoria, precoCusto, precoVenda, estoque, ncm });
+    try {
+      await cliente.query('BEGIN');
 
-  }
-  catch (err) {
+      const produtoExistente = await cliente.query(
+        'SELECT * FROM produtos WHERE LOWER(nome) = LOWER($1) FOR UPDATE',
+        [nome]
+      );
+
+      let resultado;
+
+      if (produtoExistente.rowCount > 0) {
+        resultado = await cliente.query(
+          'UPDATE produtos SET estoque = estoque + $1 WHERE id = $2 RETURNING *',
+          [estoqueFormatado, produtoExistente.rows[0].id]
+        );
+      } else {
+        resultado = await cliente.query(
+          `INSERT INTO produtos (nome, categoria, "precoCusto", "precoVenda", estoque, ncm)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [nome, categoria, precoCusto, precoVenda, estoqueFormatado, ncm]
+        );
+      }
+
+      await cliente.query('COMMIT');
+      res.status(produtoExistente.rowCount > 0 ? 200 : 201).json(resultado.rows[0]);
+    } catch (err) {
+      await cliente.query('ROLLBACK');
+      throw err;
+    } finally {
+      cliente.release();
+    }
+  } catch (err) {
     console.error(err);
     res.status(500).json({ err: 'Erro em enviar produto' });
+  }
+});
 
+app.put('/produtos/:id', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { nome, categoria, precoCusto, precoVenda, estoque, ncm } = req.body;
+  const estoqueFormatado = Number.parseInt(estoque, 10);
 
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID do produto inválido' });
   }
 
+  try {
+    const resultado = await db.query(
+      `UPDATE produtos
+       SET nome = $1, categoria = $2, "precoCusto" = $3,
+           "precoVenda" = $4, estoque = $5, ncm = $6
+       WHERE id = $7
+       RETURNING *`,
+      [nome, categoria, precoCusto, precoVenda, estoqueFormatado, ncm, id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Produto não encontrado' });
+    }
+
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao editar produto' });
+  }
+});
+
+app.delete('/produtos/:id', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID do produto inválido' });
+  }
+
+  try {
+    const resultado = await db.query('DELETE FROM produtos WHERE id = $1', [id]);
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Produto não encontrado' });
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao excluir produto' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
