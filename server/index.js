@@ -1,5 +1,7 @@
 const express = require('express'); //importa as bibliotecas
 const cors = require('cors');
+const multer = require('multer');
+const { XMLParser } = require('fast-xml-parser');
 require('dotenv').config();
 
 const db = require('./db'); // importa conexão do banco 
@@ -9,6 +11,10 @@ const db = require('./db'); // importa conexão do banco
 const app = express();  // cria a aplicação do servidor 
 app.use(cors());
 app.use(express.json()); // ensino o servidor dados JSON
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 
 app.get('/', (req, res) => {
@@ -101,6 +107,82 @@ app.put('/produtos/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ err: 'Erro ao editar produto' });
+  }
+});
+
+app.post('/notas/importar', upload.single('xml'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ err: 'Selecione um arquivo XML' });
+  }
+
+  try {
+    const parser = new XMLParser({ removeNSPrefix: true, ignoreAttributes: false });
+    const documento = parser.parse(req.file.buffer.toString('utf8'));
+    const nfe = documento.nfeProc?.NFe || documento.NFe;
+    const infNFe = nfe?.infNFe;
+    const detalhes = infNFe?.det
+      ? (Array.isArray(infNFe.det) ? infNFe.det : [infNFe.det])
+      : [];
+
+    if (detalhes.length === 0) {
+      return res.status(400).json({ err: 'O XML não possui produtos' });
+    }
+
+    const cliente = await db.connect();
+    let criados = 0;
+    let atualizados = 0;
+
+    try {
+      await cliente.query('BEGIN');
+
+      for (const detalhe of detalhes) {
+        const produtoXml = detalhe.prod;
+        const nome = String(produtoXml?.xProd || '').trim();
+        const quantidade = Number.parseFloat(produtoXml?.qCom);
+        const precoCusto = Number.parseFloat(produtoXml?.vUnCom);
+        const ncmProduto = String(produtoXml?.NCM || '').trim();
+
+        if (!nome || Number.isNaN(quantidade) || quantidade <= 0 || Number.isNaN(precoCusto)) {
+          continue;
+        }
+
+        const existente = await cliente.query(
+          'SELECT id FROM produtos WHERE LOWER(nome) = LOWER($1) FOR UPDATE',
+          [nome]
+        );
+
+        if (existente.rowCount > 0) {
+          await cliente.query(
+            'UPDATE produtos SET estoque = estoque + $1 WHERE id = $2',
+            [quantidade, existente.rows[0].id]
+          );
+          atualizados++;
+        } else {
+          await cliente.query(
+            `INSERT INTO produtos (nome, categoria, "precoCusto", "precoVenda", estoque, ncm)
+             VALUES ($1, 'outros', $2, $3, $4, $5)`,
+            [nome, precoCusto, precoCusto * 1.3, quantidade, ncmProduto]
+          );
+          criados++;
+        }
+      }
+
+      await cliente.query('COMMIT');
+    } catch (err) {
+      await cliente.query('ROLLBACK');
+      throw err;
+    } finally {
+      cliente.release();
+    }
+
+    res.json({
+      nota: infNFe.ide?.nNF || 'não identificada',
+      criados,
+      atualizados
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ err: 'Não foi possível ler o XML da NF-e' });
   }
 });
 
