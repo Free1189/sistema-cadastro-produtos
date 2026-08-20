@@ -115,6 +115,12 @@ app.post('/notas/importar', upload.single('xml'), async (req, res) => {
     return res.status(400).json({ err: 'Selecione um arquivo XML' });
   }
 
+  const codigoNfce = String(req.body.codigoNfce || '').replace(/\D/g, '');
+
+  if (codigoNfce.length !== 44) {
+    return res.status(400).json({ err: 'O código da NFC-e deve conter 44 números' });
+  }
+
   try {
     const parser = new XMLParser({ removeNSPrefix: true, ignoreAttributes: false });
     const documento = parser.parse(req.file.buffer.toString('utf8'));
@@ -177,6 +183,7 @@ app.post('/notas/importar', upload.single('xml'), async (req, res) => {
 
     res.json({
       nota: infNFe.ide?.nNF || 'não identificada',
+      codigoNfce,
       criados,
       atualizados
     });
