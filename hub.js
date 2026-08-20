@@ -1,0 +1,37 @@
+if (sessionStorage.getItem('autenticado') !== 'true') {
+  window.location.href = 'login.html';
+}
+
+const btnSair = document.getElementById('btnSair');
+const hubMensagem = document.getElementById('hubMensagem');
+
+btnSair.addEventListener('click', () => {
+  sessionStorage.removeItem('autenticado');
+  sessionStorage.removeItem('perfil');
+  window.location.href = 'login.html';
+});
+
+const perfil = sessionStorage.getItem('perfil');
+
+const acessoNegado = sessionStorage.getItem('acessoNegado');
+if (acessoNegado) {
+  alert(`Acesso negado: o perfil de vendas não tem acesso a ${acessoNegado}.`);
+  sessionStorage.removeItem('acessoNegado');
+}
+
+document.querySelectorAll('.hub-card').forEach((card) => {
+  card.addEventListener('click', (evento) => {
+    if (card.dataset.perfil === 'admin' && perfil !== 'admin') {
+      evento.preventDefault();
+      alert('Acesso negado: seu perfil não tem permissão para esta área.');
+      return;
+    }
+
+    if (!card.dataset.emBreve) {
+      return;
+    }
+
+    evento.preventDefault();
+    hubMensagem.textContent = `${card.dataset.emBreve} estará disponível em breve.`;
+  });
+});

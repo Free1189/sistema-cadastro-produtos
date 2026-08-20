@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Hub - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="hub-container">
+    <header class="hub-header">
+      <div>
+        <p class="hub-kicker">Central de operações</p>
+        <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      </div>
+      <button type="button" id="btnSair" class="btn-sair">Sair</button>
+    </header>
+
+    <section class="hub-content" aria-labelledby="tituloHub">
+      <div class="hub-intro">
+        <p class="hub-kicker">Painel principal</p>
+        <h2 id="tituloHub">Escolha uma área para continuar</h2>
+      </div>
+
+      <nav class="hub-grid" aria-label="Módulos do sistema">
+        <a class="hub-card hub-card-destaque" href="#" data-em-breve="Vendas">
+          <span class="hub-card-index">01</span>
+          <span class="hub-card-title">Vendas</span>
+          <span class="hub-card-status">Em breve</span>
+        </a>
+        <a class="hub-card" href="#" data-em-breve="Caixa" data-perfil="admin">
+          <span class="hub-card-index">02</span>
+          <span class="hub-card-title">Caixa</span>
+          <span class="hub-card-status">Acesso restrito</span>
+        </a>
+        <a class="hub-card" href="#" data-em-breve="Cadastro de clientes">
+          <span class="hub-card-index">03</span>
+          <span class="hub-card-title">Cadastro de clientes</span>
+          <span class="hub-card-status">Em breve</span>
+        </a>
+        <a class="hub-card" href="#" data-em-breve="Cobrança de clientes" data-perfil="admin">
+          <span class="hub-card-index">04</span>
+          <span class="hub-card-title">Cobrança de clientes</span>
+          <span class="hub-card-status">Acesso restrito</span>
+        </a>
+        <a class="hub-card" href="#" data-em-breve="Total de vendas" data-perfil="admin">
+          <span class="hub-card-index">05</span>
+          <span class="hub-card-title">Total de vendas</span>
+          <span class="hub-card-status">Acesso restrito</span>
+        </a>
+        <a class="hub-card hub-card-destaque" href="index.html" data-perfil="admin">
+          <span class="hub-card-index">06</span>
+          <span class="hub-card-title">Cadastro de produtos</span>
+          <span class="hub-card-status">Acesso restrito</span>
+        </a>
+      </nav>
+      <p id="hubMensagem" class="hub-mensagem" role="status"></p>
+    </section>
+  </main>
+  <script src="hub.js"></script>
+</body>
+
+</html>

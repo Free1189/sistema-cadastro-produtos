@@ -1,7 +1,13 @@
 console.log("JavaScript conectado com sucesso !! ");
 
-if (sessionStorage.getItem('autenticado') !== 'true') {
+const autenticado = sessionStorage.getItem('autenticado') === 'true';
+const perfil = sessionStorage.getItem('perfil');
+
+if (!autenticado) {
   window.location.href = 'login.html';
+} else if (perfil !== 'admin') {
+  sessionStorage.setItem('acessoNegado', 'Cadastro de produtos');
+  window.location.href = 'hub.html';
 }
 
 
@@ -22,8 +28,7 @@ let produtos = JSON.parse(localStorage.getItem('produtos_cadastrados')) || [];
 let idEditando = undefined;
 
 btnSair.addEventListener('click', () => {
-  sessionStorage.removeItem('autenticado');
-  window.location.href = 'login.html';
+  window.location.href = 'hub.html';
 });
 
 
@@ -106,7 +111,7 @@ function converteDecimal(valortexto) {
   let limpo = String(valortexto).trim();
   limpo = limpo.replace(/\./g, '');
   limpo = limpo.replace(',', '.');
-  return parceFloat(limpo) || 0;
+  return parseFloat(limpo) || 0;
 
 }
 function formatacaonumero(evento) {

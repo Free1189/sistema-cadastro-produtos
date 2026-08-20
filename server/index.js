@@ -19,8 +19,24 @@ const upload = multer({
 app.post('/login', (req, res) => {
   const { usuario, senha } = req.body;
 
-  if (usuario === process.env.APP_USER && senha === process.env.APP_PASSWORD) {
-    return res.json({ autenticado: true });
+  const usuarios = [
+    {
+      usuario: process.env.APP_USER_VENDAS,
+      senha: process.env.APP_PASSWORD_VENDAS,
+      perfil: 'vendas'
+    },
+    {
+      usuario: process.env.APP_USER_ADMIN,
+      senha: process.env.APP_PASSWORD_ADMIN,
+      perfil: 'admin'
+    }
+  ];
+  const usuarioEncontrado = usuarios.find(
+    (conta) => conta.usuario === usuario && conta.senha === senha
+  );
+
+  if (usuarioEncontrado) {
+    return res.json({ autenticado: true, perfil: usuarioEncontrado.perfil });
   }
 
   res.status(401).json({ err: 'Usuário ou senha inválidos' });

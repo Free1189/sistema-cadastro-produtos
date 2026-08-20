@@ -23,7 +23,8 @@ loginForm.addEventListener('submit', async (evento) => {
     }
 
     sessionStorage.setItem('autenticado', 'true');
-    window.location.href = 'index.html';
+    sessionStorage.setItem('perfil', resultado.perfil);
+    window.location.href = 'hub.html';
   } catch (erro) {
     console.error('Erro ao fazer login:', erro);
     mensagemLogin.textContent = 'Não foi possível conectar ao servidor.';
