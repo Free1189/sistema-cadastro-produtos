@@ -15,16 +15,27 @@
     <header>
       <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
       <p class="subtitulo">Sistema Cadastro de produtos</p>
+      <button type="button" id="btnSair" class="btn-sair">Sair</button>
     </header>
 
     <h2 class="titulo-pagina">Cadastro do novo produto</h2>
 
-    <form class="form-grid">
-
+    <form id="importarXmlForm" class="form-grid importar-xml">
       <div class="campo-grupo">
-        <label for="codigoProduto">Código do Produto:</label>
-        <input type="number" step="0" id="codigoProduto" placeholder="00000" required>
+        <label for="codigoNfce">Código da NFC-e:</label>
+        <input type="text" id="codigoNfce" inputmode="numeric" maxlength="44"
+          placeholder="Digite os 44 números da chave de acesso" required>
       </div>
+      <div class="campo-grupo">
+        <label for="arquivoXml">Arquivo XML:</label>
+        <input type="file" id="arquivoXml" accept=".xml,text/xml" required>
+      </div>
+      <div class="campo-grupo full-width">
+        <button type="submit" class="btn-salvar btn-importar-xml">Importar XML</button>
+      </div>
+    </form>
+
+    <form id="cadastroForm" class="form-grid">
 
       <div class="campo-grupo">
         <label for="nomeProduto">Nome do Produto:</label>
@@ -65,12 +76,12 @@
 
       <div class="campo-grupo">
         <label for="ncm">NCM / FISCAL:</label>
-        <input type="text" id="ncm" placeholder="Ex: 0000.00.00" maxlength="12" >
+        <input type="text" id="ncm" placeholder="Ex: 0000.00.00" maxlength="12">
       </div>
 
       <div class="campo-grupo full-width">
         <button type="submit" id="btnSalvar" class="btn-salvar">Salvar Produto</button>
-        
+
       </div>
 
     </form>
@@ -78,7 +89,8 @@
     <div class="secao-lista">
       <div class="lista-header">
         <h3>Produtos Cadastrados</h3>
-        <span id="totalProdutos" type = "number" class="contador-total">Total de Produtos: <span id="numeroProdutos" > 0</span></span>
+        <span id="totalProdutos" type="number" class="contador-total">Total de Produtos: <span id="numeroProdutos">
+            0</span></span>
       </div>
 
       <div class="tabela-responsive">
@@ -112,7 +124,7 @@
     </div>
 
   </div>
-<script src="front.js" ></script>
+  <script src="front.js"></script>
 </body>
 
 </html>

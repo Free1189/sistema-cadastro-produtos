@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Login - Sistema de Cadastro</title>
+</head>
+
+<body>
+  <main class="login-container">
+    <section class="login-box">
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo-login">Acesse o sistema de cadastro</p>
+
+      <form id="loginForm" class="login-form">
+        <label for="usuario">Usuário</label>
+        <input type="text" id="usuario" autocomplete="username" required>
+
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" autocomplete="current-password" required>
+
+        <button type="submit" class="btn-salvar">Entrar</button>
+        <p id="mensagemLogin" class="mensagem-login" role="alert"></p>
+      </form>
+    </section>
+  </main>
+  <script src="login.js"></script>
+</body>
+
+</html>

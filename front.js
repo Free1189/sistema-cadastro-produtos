@@ -1,8 +1,10 @@
 console.log("JavaScript conectado com sucesso !! ");
 
-const form = document.querySelector('.form-grid');
+if (sessionStorage.getItem('autenticado') !== 'true') {
+  window.location.href = 'login.html';
+}
 
-const codigoProduto = document.getElementById('codigoProduto');
+
 const nomeProduto = document.getElementById('nomeProduto');
 const categoria = document.getElementById('categoria');
 const unidadeVenda = document.getElementById('unidadeVenda');
@@ -11,52 +13,60 @@ const precoCusto = document.getElementById('precoCusto');
 const precoVenda = document.getElementById('precoVenda');
 const ncm = document.getElementById('ncm');
 const btnSalvar = document.getElementById('btnSalvar');
+const btnSair = document.getElementById('btnSair');
 const totalProdutos = document.getElementById('numeroProdutos');
 const listaProdutos = document.getElementById('listaProdutos');
 
 
 let produtos = JSON.parse(localStorage.getItem('produtos_cadastrados')) || [];
-let idEditando = null;
+let idEditando = undefined;
+
+btnSair.addEventListener('click', () => {
+  sessionStorage.removeItem('autenticado');
+  window.location.href = 'login.html';
+});
+
 
 function formatarNome(texto) {
 
-  if (!texto ) return '';
+  if (!texto) return '';
 
   let textoFormatado = texto.toLowerCase();
-   textoFormatado = textoFormatado.replace( /(^\w|\s\w)/g, function(letra){
-  return letra.toUpperCase();
+  textoFormatado = textoFormatado.replace(/(^\w|\s\w)/g, function (letra) {
+    return letra.toUpperCase();
 
-   });
-  
-  
+  });
+
+
   return textoFormatado;
-console.log ("necessario para salvar");
+  console.log("necessario para salvar");
 };
 
 
-ncm.addEventListener ('input',function(e){
+ncm.addEventListener('input', function (e) {
 
   let valor = e.target.value.replace(/\D/g, '');
 
-  if (valor.length> 8 ){
-    valor = valor.slice (0,8);}
+  if (valor.length > 8) {
+    valor = valor.slice(0, 8);
+  }
 
-  
+
   let resultado = '';
-  if (valor.length > 0 ){
-    resultado = valor.slice(0,4);
+  if (valor.length > 0) {
+    resultado = valor.slice(0, 4);
 
   }
   if (valor.length > 4) {
 
-    resultado += '.' + valor.slice(4,6);
+    resultado += '.' + valor.slice(4, 6);
   }
-  if (valor.length> 6){
+  if (valor.length > 6) {
 
-    resultado += '.' + valor.slice(6,8);
+    resultado += '.' + valor.slice(6, 8);
   }
 
-  
+
   e.target.value = resultado;
 
 
@@ -64,119 +74,31 @@ ncm.addEventListener ('input',function(e){
 
 
 
+function prepararEdicao(id) {
 
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
+  idEditando = id;
+  const prod = produtos.find(produto => produto.id === id);
 
+  console.log("Produto encontrado:", prod);
 
-  const novoProduto = {
-    codigo: idEditando !== null ? codigoProduto.value : gerarCodigo(),
-    nome: formatarNome(nomeProduto.value),
-    categoria: categoria.value,
-    unidadeVenda: unidadeVenda.value,
-    estoque: estoque.value,
-    precoCusto: precoCusto.value,
-    precoVenda: precoVenda.value,
-    ncm: ncm.value
+  if (prod) {
 
-  };
-
-  if (idEditando !== null) {
-    produtos[idEditando] = novoProduto;
-    idEditando = null;
-    btnSalvar.textContent = ("Salvar novo Produto");
+    document.getElementById('nomeProduto').value = prod.nome;
+    document.getElementById('categoria').value = prod.categoria;
+    document.getElementById('estoque').value = prod.estoque;
+    document.getElementById('precoCusto').value = prod.precoCusto || prod.precocusto;
+    document.getElementById('precoVenda').value = prod.precoVenda || prod.precovenda
+    document.getElementById('ncm').value = prod.ncm;
   }
 
-  else {
-    produtos.push(novoProduto)
-  }
-  renderizarTabela();
-  salvarLocalStorage();
-
-  console.log("lista de produtos :", produtos);
-  form.reset();
-  codigoProduto.value = gerarCodigo();
-
-})
-
-function renderizarTabela() {
-  listaProdutos.innerHTML = '';
-
-  produtos.forEach((produto, index) => {
-    const tr = document.createElement('tr');
-
-
-    tr.innerHTML = `
-            <td>${produto.codigo}</td>
-            <td>${produto.nome}</td>
-            <td>${produto.categoria}</td>
-            <td>${produto.unidadeVenda}</td>
-            <td>${produto.estoque}</td>
-            <td>R$ ${produto.precoCusto}</td>
-            <td>R$ ${produto.precoVenda}</td>
-            <td>${produto.ncm}</td>
-            <td>
-                <button class="btn-acao btn-editar" onclick="prepararEdicao(${index})">Editar</button>
-                <button class="btn-acao btn-excluir" onclick="excluirProduto(${index})">Excluir</button>
-            </td>
-        `;
-
-    listaProdutos.appendChild(tr);
-    atualizarTotalProdutos();
-
-  });
-}
-function excluirProduto(index) {
-  if (confirm("Tem certeza que deseja excluir produto")) {
-    produtos.splice(index, 1)
-    renderizarTabela();
-    salvarLocalStorage();
-  }
-}
-function salvarLocalStorage() {
-
-  localStorage.setItem('produtos_cadastrados', JSON.stringify(produtos));
-}
-
-function prepararEdicao(index) {
-
-  idEditando = index;
-  const prod = produtos[index];
-  codigoProduto.value = prod.codigo;
-  nomeProduto.value = prod.nome;
-  categoria.value = prod.categoria;
-  unidadeVenda.value = prod.unidadeVenda;
-  estoque.value = prod.estoque;
-  precoCusto.value = String(prod.precoCusto).replace('.', ',');
-  precoVenda.value = String(prod.precoVenda).replace('.', ',');
-  ncm.value = prod.ncm;
 
   btnSalvar.textContent = ("Atualizar Produto");
 
 }
 
-function atualizarTotalProdutos() {
-  if (totalProdutos) {
-
-    totalProdutos.textContent = produtos.length;
-  }
-
-}
 
 
-function gerarCodigo() {
 
-  if (produtos.length == 0) {
-
-    return "00001"
-
-  }
-  const numeros = produtos.map(p => parseInt(p.codigo, 10 || 0));
-  const maiorNumero = Math.max(...numeros);
-  const proximoNumero = maiorNumero + 1;
-  return String(proximoNumero);
-
-}
 
 function converteDecimal(valortexto) {
 
@@ -197,32 +119,48 @@ function formatacaonumero(evento) {
 
   let numero = parseFloat(valor)
 
-  if (!isNaN (numero))
-    {
-      input.value = numero.toFixed(2).replace('.', ','); 
+  if (!isNaN(numero)) {
+    input.value = numero.toFixed(2).replace('.', ',');
 
-    } 
+  }
 
 }
 
+function calcularPrecoVenda() {
+  const custo = Number.parseFloat(precoCusto.value.replace(',', '.'));
 
-renderizarTabela();
-codigoProduto.value = gerarCodigo();  
-precoCusto.addEventListener('blur', formatacaonumero);
-precoVenda.addEventListener('blur', formatacaonumero);
+  if (!Number.isNaN(custo) && custo > 0) {
+    precoVenda.value = (custo * 1.3).toFixed(2).replace('.', ',');
+  }
+}
+
+
+
 
 
 const API_URL = 'http://localhost:3000/produtos';
+const importarXmlForm = document.getElementById('importarXmlForm');
+const arquivoXml = document.getElementById('arquivoXml');
+const codigoNfce = document.getElementById('codigoNfce');
 
-const form = document.querySelector('form');
+const form = document.getElementById('cadastroForm');
 const tabela = document.querySelector('tbody');
+
+function atualizarTotalProdutos() {
+  totalProdutos.textContent = produtos.length;
+}
 
 // carrega o produto do bd na tabela 
 
 async function carregarProdutos() {
   try {
     const resposta = await fetch(API_URL);
-    const produtos = await resposta.json();
+    if (!resposta.ok) {
+      throw new Error(`Erro ao carregar produtos: ${resposta.status}`);
+    }
+
+    produtos = await resposta.json();
+    atualizarTotalProdutos();
 
     tabela.innerHTML = '';
 
@@ -233,13 +171,13 @@ async function carregarProdutos() {
                 <td>${prod.nome}</td>
                 <td>${prod.categoria}</td>
                 <td>${prod.unidade || 'Unidade'}</td>
-                <td>${prod.quantidade}</td>
-                <td>R$ ${parseFloat(prod.preco).toFixed(2)}</td>
-                <td>R$ ${parseFloat(prod.preco).toFixed(2)}</td>
+                <td>${prod.estoque}</td>
+                <td>R$ ${parseFloat(prod.precoCusto).toFixed(2)}</td>
+                <td>R$ ${parseFloat(prod.precoVenda).toFixed(2)}</td>
                 <td>${prod.ncm || '-'}</td>
                 <td>
-                    <button type="button">Editar</button>
-                    <button type="button">Excluir</button>
+                    <button type="button" onclick="prepararEdicao(${prod.id})">Editar</button>
+                    <button type="button" onclick="excluirProduto(${prod.id})">Excluir</button>
                 </td>
             `;
       tabela.appendChild(linha);
@@ -249,43 +187,109 @@ async function carregarProdutos() {
   }
 }
 
+importarXmlForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const chaveNfce = codigoNfce.value.replace(/\D/g, '');
+
+  if (chaveNfce.length !== 44) {
+    alert('A chave da NFC-e deve conter 44 números.');
+    return;
+  }
+
+  const dados = new FormData();
+  dados.append('xml', arquivoXml.files[0]);
+  dados.append('codigoNfce', chaveNfce);
+
+  try {
+    const resposta = await fetch('http://localhost:3000/notas/importar', {
+      method: 'POST',
+      body: dados
+    });
+    const resultado = await resposta.json();
+
+    if (!resposta.ok) {
+      alert(resultado.err || 'Erro ao importar XML.');
+      return;
+    }
+
+    alert(`Nota ${resultado.nota}: ${resultado.criados} produto(s) criado(s) e ${resultado.atualizados} estoque(s) atualizado(s).`);
+    importarXmlForm.reset();
+    carregarProdutos();
+  } catch (erro) {
+    console.error('Erro ao importar XML:', erro);
+    alert('Não foi possível conectar ao servidor.');
+  }
+});
+
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
 
+
   const inputs = form.querySelectorAll('input, select');
 
-  const nome = document.getElementById('nome').value.trim();
+  const nome = formatarNome(document.getElementById('nomeProduto').value.trim());
   const categoria = document.getElementById('categoria').value.trim();
-  const preco = parseFloat(document.getElementById('preco').value);
-  const quantidade = parseInt(document.getElementById('quantidade').value);
+  const precoVenda = parseFloat(document.getElementById('precoVenda').value);
+  const precoCusto = parseFloat(document.getElementById('precoCusto').value);
+  const estoque = parseInt(document.getElementById('estoque').value);
+  const ncm = String(document.getElementById('ncm').value);
 
-  if (!name || !categoria ||  categoria <= 0 || isNaN(quantidade )|| !quantidade || isNaN(preco) || preco <=0 ){
-    alert ("Por favor ensira os números necessarios para a finalização do cadastro dos produtos ! ")
+
+  if (!nome || !categoria || estoque <= 0 || !ncm || precoVenda <= 0 || precoCusto <= 0) {
+    alert("Por favor ensira os números necessarios para a finalização do cadastro dos produtos ! ")
     return;
   }
-  const novoProduto = { nome, categoria, preco, quantidade
+  const novoProduto = {
+    nome, categoria, precoCusto, precoVenda, estoque, ncm
   };
 
+  const url = idEditando
+    ? `http://localhost:3000/produtos/${idEditando}`
+    : 'http://localhost:3000/produtos';
 
-  try {
-    const resposta = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(novoProduto)
-    });
+  const metodo = idEditando ? 'PUT' : 'POST';
 
-    if (resposta.ok) {
-      form.reset();
-      carregarProdutos();
-    } else {
-      alert('Erro ao cadastrar produto.');
-    }
-  } catch (erro) {
-    console.error('Erro ao enviar produto:', erro);
+  const responde = await fetch(url, {
+
+    method: metodo,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(novoProduto)
+  });
+
+  if (responde.ok) {
+
+    alert(idEditando ? "Produto editado" : "Produto cadastrado");
+    idEditando = undefined;
+    btnSalvar.textContent = "Salvar Produto";
+    form.reset()
+    carregarProdutos();
+
   }
 });
 
+async function excluirProduto(id) {
+  if (confirm("Tem certeza que deseja excluir produto?")) {
+    try {
+      const res = await fetch(`http://localhost:3000/produtos/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        carregarProdutos();
+      }
+    } catch (err) {
+      console.error("Erro ao excluir:", err);
+    }
+  }
+}
+
 carregarProdutos();
 
+precoCusto.addEventListener('blur', (evento) => {
+  formatacaonumero(evento);
+  calcularPrecoVenda();
+});
+precoVenda.addEventListener('blur', formatacaonumero);

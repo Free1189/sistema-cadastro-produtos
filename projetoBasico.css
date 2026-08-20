@@ -29,6 +29,80 @@ header {
   border-radius: 8px 8px 0 0;
 }
 
+.btn-sair {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  padding: 7px 14px;
+  color: var(--cor-branca);
+  background-color: transparent;
+  border: 1px solid var(--cor-cinza);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.btn-sair:hover {
+  background-color: var(--cor-azul-escuro);
+}
+
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-box {
+  width: min(100%, 380px);
+  padding: 32px;
+  background-color: var(--cor-branca);
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.login-box h1 {
+  margin-bottom: 8px;
+  color: var(--cor-fundo-preto);
+  text-align: center;
+}
+
+.subtitulo-login {
+  margin-bottom: 24px;
+  color: var(--cor-cinza);
+  text-align: center;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-form label {
+  color: var(--cor-fundo-preto);
+  font-weight: bold;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.login-form button {
+  margin-top: 12px;
+}
+
+.mensagem-login {
+  min-height: 20px;
+  color: #b42318;
+  text-align: center;
+}
+
 .cor-amarela {
   color: var(--cor-amarela);
   font-weight: bold;
@@ -75,6 +149,14 @@ header {
   grid-template-columns: repeat(2, 1fr);
   gap: 18px 25px;
   width: 100%;
+}
+
+.importar-xml {
+  margin-bottom: 24px;
+  padding: 18px;
+  background-color: #f8fafc;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
 }
 
 .campo-grupo {
@@ -125,6 +207,11 @@ header {
 
 .btn-salvar:hover {
   background-color: var(--cor-azul-escuro);
+}
+
+.btn-importar-xml {
+  margin-top: 6px;
+  padding: 15px 20px;
 }
 
 .secao-lista {
