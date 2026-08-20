@@ -16,6 +16,16 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
+app.post('/login', (req, res) => {
+  const { usuario, senha } = req.body;
+
+  if (usuario === process.env.APP_USER && senha === process.env.APP_PASSWORD) {
+    return res.json({ autenticado: true });
+  }
+
+  res.status(401).json({ err: 'Usuário ou senha inválidos' });
+});
+
 
 app.get('/', (req, res) => {
   res.send('Servidor esta rodando'); // cria a primeira rota do servidor, quando algume acessa (/), o servidor responde enviando a mensagem 
