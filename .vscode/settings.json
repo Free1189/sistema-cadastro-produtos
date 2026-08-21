@@ -1,0 +1,8 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "/^Push-Location \\.\\\\server; node -e \"const \\{Pool\\}=require\\('pg'\\); require\\('dotenv'\\)\\.config\\(\\{path:'\\.env'\\}\\); const pool=new Pool\\(\\{user:process\\.env\\.DB_USER,host:process\\.env\\.DB_HOST,database:process\\.env\\.DB_NAME,password:process\\.env\\.DB_PASSWORD,port:process\\.env\\.DB_PORT\\}\\); pool\\.query\\('DELETE FROM clientes WHERE nome = \\$1',\\['Cliente teste condicional'\\]\\)\\.then\\(\\(\\)=>pool\\.end\\(\\)\\)\\.catch\\(err=>\\{console\\.error\\(err\\); pool\\.end\\(\\); process\\.exitCode=1\\}\\)\"; Pop-Location$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

@@ -133,9 +133,12 @@ function formatacaonumero(evento) {
 
 function calcularPrecoVenda() {
   const custo = Number.parseFloat(precoCusto.value.replace(',', '.'));
+  const margemMarkup = 0.30;
 
   if (!Number.isNaN(custo) && custo > 0) {
-    precoVenda.value = (custo * 1.3).toFixed(2).replace('.', ',');
+    const vendaSemArredondamento = custo / (1 - margemMarkup);
+    const venda = Math.ceil(vendaSemArredondamento);
+    precoVenda.value = venda.toFixed(2).replace('.', ',');
   }
 }
 
@@ -150,6 +153,12 @@ const codigoNfce = document.getElementById('codigoNfce');
 
 const form = document.getElementById('cadastroForm');
 const tabela = document.querySelector('tbody');
+const buscaProduto = document.getElementById('buscaProduto');
+const paginaAnterior = document.getElementById('paginaAnterior');
+const paginaProxima = document.getElementById('paginaProxima');
+const informacaoPagina = document.getElementById('informacaoPagina');
+let paginaAtual = 1;
+let totalPaginas = 1;
 
 function atualizarTotalProdutos() {
   totalProdutos.textContent = produtos.length;
@@ -159,13 +168,23 @@ function atualizarTotalProdutos() {
 
 async function carregarProdutos() {
   try {
-    const resposta = await fetch(API_URL);
+    const parametros = new URLSearchParams({
+      pagina: paginaAtual,
+      busca: buscaProduto.value.trim()
+    });
+    const resposta = await fetch(`${API_URL}?${parametros}`);
     if (!resposta.ok) {
       throw new Error(`Erro ao carregar produtos: ${resposta.status}`);
     }
 
-    produtos = await resposta.json();
+    const resultado = await resposta.json();
+    produtos = resultado.produtos;
+    paginaAtual = resultado.pagina;
+    totalPaginas = resultado.totalPaginas;
     atualizarTotalProdutos();
+    informacaoPagina.textContent = `Página ${paginaAtual} de ${totalPaginas}`;
+    paginaAnterior.disabled = paginaAtual === 1;
+    paginaProxima.disabled = paginaAtual === totalPaginas;
 
     tabela.innerHTML = '';
 
@@ -191,6 +210,25 @@ async function carregarProdutos() {
     console.error('Erro ao carregar produtos:', erro);
   }
 }
+
+buscaProduto.addEventListener('input', () => {
+  paginaAtual = 1;
+  carregarProdutos();
+});
+
+paginaAnterior.addEventListener('click', () => {
+  if (paginaAtual > 1) {
+    paginaAtual--;
+    carregarProdutos();
+  }
+});
+
+paginaProxima.addEventListener('click', () => {
+  if (paginaAtual < totalPaginas) {
+    paginaAtual++;
+    carregarProdutos();
+  }
+});
 
 importarXmlForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -237,8 +275,8 @@ form.addEventListener('submit', async (e) => {
 
   const nome = formatarNome(document.getElementById('nomeProduto').value.trim());
   const categoria = document.getElementById('categoria').value.trim();
-  const precoVenda = parseFloat(document.getElementById('precoVenda').value);
-  const precoCusto = parseFloat(document.getElementById('precoCusto').value);
+  const precoVenda = converteDecimal(document.getElementById('precoVenda').value);
+  const precoCusto = converteDecimal(document.getElementById('precoCusto').value);
   const estoque = parseInt(document.getElementById('estoque').value);
   const ncm = String(document.getElementById('ncm').value);
 

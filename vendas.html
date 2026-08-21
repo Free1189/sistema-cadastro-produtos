@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Vendas - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card venda-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Nova venda</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="venda-content">
+      <div class="venda-cabecalho">
+        <div>
+          <p class="hub-kicker">Frente de caixa</p>
+          <h2>Montar venda</h2>
+        </div>
+        <p id="mensagemVenda" class="mensagem-venda" role="status"></p>
+      </div>
+
+      <div class="busca-venda">
+        <label for="buscaVenda">Produto</label>
+        <input type="search" id="buscaVenda" placeholder="Busque por nome ou código">
+        <div id="resultadosBusca" class="resultados-busca"></div>
+      </div>
+
+      <div class="venda-layout">
+        <section class="venda-carrinho">
+          <h3>Itens da venda</h3>
+          <div class="tabela-responsive">
+            <table class="tabela-produtos tabela-venda">
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Qtd.</th>
+                  <th>Preço nesta venda</th>
+                  <th>Total</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="itensVenda"></tbody>
+            </table>
+          </div>
+          <p id="carrinhoVazio" class="estado-vazio">Nenhum produto adicionado.</p>
+        </section>
+
+        <aside class="venda-resumo">
+          <h3>Resumo e pagamento</h3>
+          <label for="clienteVenda">Cliente</label>
+          <input type="search" id="clienteVenda" placeholder="Busque um cliente cadastrado">
+          <input type="hidden" id="clienteIdVenda">
+          <div id="resultadosClientes" class="resultados-busca"></div>
+
+          <label for="descontoVenda">Desconto (%)</label>
+          <input type="number" id="descontoVenda" min="0" max="100" step="0.01" value="0">
+
+          <label for="tipoPagamento">Pagamento</label>
+          <select id="tipoPagamento">
+            <option value="avista">Pagar na hora</option>
+            <option value="futuro">Pagar no futuro</option>
+          </select>
+
+          <label for="vencimentoVenda">Vencimento</label>
+          <input type="date" id="vencimentoVenda" disabled>
+
+          <div class="totais-venda">
+            <span>Subtotal</span><strong id="subtotalVenda">R$ 0,00</strong>
+            <span>Desconto</span><strong id="valorDescontoVenda">R$ 0,00</strong>
+            <span>Total</span><strong id="totalVenda">R$ 0,00</strong>
+          </div>
+
+          <button type="button" id="btnGerarCondicional" class="btn-salvar">Gerar condicional PDF</button>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <script src="vendas.js"></script>
+</body>
+
+</html>

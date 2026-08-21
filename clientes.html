@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Clientes - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card clientes-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Cadastro de clientes</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="clientes-content">
+      <div class="venda-cabecalho">
+        <div>
+          <p class="hub-kicker">Cadastros</p>
+          <h2>Novo cliente</h2>
+        </div>
+        <p id="mensagemCliente" class="mensagem-venda" role="status"></p>
+      </div>
+
+      <form id="clienteForm" class="form-grid">
+        <div class="campo-grupo full-width">
+          <label for="nomeCliente">Nome completo:</label>
+          <input type="text" id="nomeCliente" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="cpfCliente">CPF/CNPJ:</label>
+          <input type="text" id="cpfCliente" inputmode="numeric" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="telefoneCliente">Telefone:</label>
+          <input type="tel" id="telefoneCliente" inputmode="numeric" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="cidadeCliente">Cidade:</label>
+          <input type="text" id="cidadeCliente" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="bairroCliente">Bairro:</label>
+          <input type="text" id="bairroCliente" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="ruaCliente">Rua:</label>
+          <input type="text" id="ruaCliente" required>
+        </div>
+        <div class="campo-grupo">
+          <label for="numeroCliente">Número:</label>
+          <input type="text" id="numeroCliente" required>
+        </div>
+        <div class="campo-grupo full-width">
+          <button type="submit" id="btnSalvarCliente" class="btn-salvar">Salvar cliente</button>
+          <button type="button" id="btnCancelarEdicao" class="btn-secundario" hidden>Cancelar edição</button>
+        </div>
+      </form>
+
+      <div class="secao-lista clientes-lista">
+        <div class="lista-header">
+          <h3>Clientes cadastrados</h3>
+          <span id="totalClientes" class="contador-total">0 cliente(s)</span>
+        </div>
+        <div class="busca-produtos">
+          <label for="buscaCliente">Pesquisar</label>
+          <input type="search" id="buscaCliente" placeholder="Nome ou CPF/CNPJ">
+        </div>
+        <div class="tabela-responsive">
+          <table class="tabela-produtos">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>CPF/CNPJ</th>
+                <th>Telefone</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="listaClientes"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="clientes.js"></script>
+</body>
+
+</html>
