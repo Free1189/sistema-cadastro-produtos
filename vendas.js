@@ -116,7 +116,7 @@ async function buscarProdutos() {
     const botao = document.createElement('button');
     botao.type = 'button';
     botao.className = 'resultado-produto';
-    botao.innerHTML = `<strong>${produto.nome}</strong><span>Código ${produto.id} · ${dinheiro(produto.precoVenda)}</span>`;
+    botao.innerHTML = `<strong>${produto.nome}</strong><span>Código ${produto.id} · ${dinheiro(produto.precoVenda)} · Estoque: ${produto.estoque}</span>`;
     botao.addEventListener('click', () => adicionarProduto(produto));
     resultadosBusca.appendChild(botao);
   });
@@ -194,13 +194,21 @@ document.getElementById('btnGerarCondicional').addEventListener('click', async (
     return;
   }
 
+  if (tipoPagamento.value === 'avista') {
+    const pendencia = await resposta.json();
+    carrinho.length = 0;
+    document.getElementById('clienteVenda').value = '';
+    clienteIdVenda.value = '';
+    descontoVenda.value = '0';
+    renderizarCarrinho();
+    mensagemVenda.textContent = pendencia.mensagem || 'Venda enviada ao Caixa.';
+    return;
+  }
+
   const arquivo = await resposta.blob();
   const url = URL.createObjectURL(arquivo);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'condicional-venda.pdf';
-  link.click();
-  URL.revokeObjectURL(url);
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
   carrinho.length = 0;
   document.getElementById('clienteVenda').value = '';
   clienteIdVenda.value = '';

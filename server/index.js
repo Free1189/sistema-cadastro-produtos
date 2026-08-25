@@ -3,6 +3,8 @@ const cors = require('cors');
 const multer = require('multer');
 const { XMLParser } = require('fast-xml-parser');
 const PDFDocument = require('pdfkit');
+const { conectarWhatsApp, enviarCobranca, obterStatusWhatsApp } = require('./whatsapp');
+const { criarCobranca, criarCobrancaUnica, consultarCobranca } = require('./asaas');
 require('dotenv').config();
 
 const db = require('./db'); // importa conexão do banco 
@@ -16,6 +18,96 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }
 });
+
+async function enviarAvisosDeVencimento() {
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_nome, v.total, v.vencimento, c.telefone
+       FROM vendas v
+       JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id
+       WHERE v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.vencimento = CURRENT_DATE + INTERVAL '1 day'
+         AND a.venda_id IS NULL`
+    );
+
+    for (const venda of resultado.rows) {
+      const mensagem = `Olá, ${venda.cliente_nome}. Lembrete: sua condicional no valor de R$ ${Number(venda.total).toFixed(2).replace('.', ',')} vence amanhã (${new Date(venda.vencimento).toLocaleDateString('pt-BR')}). O atraso poderá gerar juros conforme as condições da venda.`;
+      try {
+        await enviarCobranca(venda.telefone, mensagem);
+        await db.query('INSERT INTO avisos_cobranca (venda_id) VALUES ($1)', [venda.id]);
+        console.log(`Aviso de vencimento enviado para a venda #${venda.id}`);
+      } catch (err) {
+        console.error(`Não foi possível avisar a venda #${venda.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Erro no agendador de cobranças:', err);
+  }
+}
+
+async function sincronizarPagamentosAsaas(asaasPaymentId = null) {
+  try {
+    const cobrancas = await db.query(
+      `SELECT asaas_payment_id, grupo_id, venda_ids, valor_cobrado
+       FROM cobrancas_asaas
+       WHERE ($1::text IS NULL AND (status NOT IN ('RECEIVED', 'CONFIRMED') OR valor_recebido < valor_cobrado))
+          OR asaas_payment_id = $1`,
+      [asaasPaymentId]
+    );
+
+    for (const cobranca of cobrancas.rows) {
+      try {
+        const pagamento = await consultarCobranca(cobranca.asaas_payment_id);
+        let valorPagoAsaas = Number(pagamento.receivedValue ?? pagamento.paidValue ?? 0);
+        const pagamentoConfirmado = ['RECEIVED', 'CONFIRMED'].includes(pagamento.status);
+        const pagamentoParcial = pagamento.status === 'PARTIALLY_RECEIVED';
+        if (valorPagoAsaas <= 0 && pagamentoConfirmado) {
+          valorPagoAsaas = Number(pagamento.value) || 0;
+        }
+        if (!pagamentoConfirmado && !pagamentoParcial && valorPagoAsaas <= 0) continue;
+
+        await db.query(
+          `UPDATE cobrancas_asaas SET status = $1, valor_recebido = $2 WHERE asaas_payment_id = $3`,
+          [pagamentoConfirmado ? pagamento.status : (valorPagoAsaas > 0 ? 'PARTIALLY_RECEIVED' : 'PENDING'), valorPagoAsaas, cobranca.asaas_payment_id]
+        );
+
+        const recebidoGrupo = await db.query(
+          `SELECT COALESCE(SUM(valor_recebido), 0)::numeric AS total_recebido
+         FROM cobrancas_asaas WHERE grupo_id = $1`,
+          [cobranca.grupo_id]
+        );
+        let restantePago = Number(recebidoGrupo.rows[0].total_recebido);
+        const vendasGrupo = await db.query(
+          `SELECT id, total, juros
+         FROM vendas
+         WHERE id = ANY($1::int[])
+         ORDER BY GREATEST(total + juros - COALESCE(valor_pago, 0), 0) ASC, id ASC`,
+          [cobranca.venda_ids]
+        );
+        for (const venda of vendasGrupo.rows) {
+          const totalVenda = Number(venda.total) + Number(venda.juros);
+          const pagoVenda = Math.min(Math.max(restantePago, 0), totalVenda);
+          await db.query(
+            `UPDATE vendas SET valor_pago = $1,
+             saldo_devedor = GREATEST(total + juros - $1, 0),
+             status_pagamento = CASE WHEN $1 >= total + juros THEN 'pago' ELSE 'pendente' END,
+             tipo_pagamento = CASE WHEN $1 >= total + juros THEN 'boleto' ELSE tipo_pagamento END,
+             pago_em = CASE WHEN $1 >= total + juros THEN CURRENT_TIMESTAMP ELSE pago_em END
+           WHERE id = $2`,
+            [pagoVenda, venda.id]
+          );
+          restantePago -= pagoVenda;
+        }
+      } catch (err) {
+        console.error(`Falha ao sincronizar cobrança Asaas ${cobranca.asaas_payment_id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao sincronizar pagamentos Asaas:', err.message);
+  }
+}
 
 app.post('/login', (req, res) => {
   const { usuario, senha } = req.body;
@@ -115,6 +207,44 @@ function documentoValido(documento) {
 
   return false;
 }
+
+app.post('/caixa/comprovante', (req, res) => {
+  const { valor, descricao, metodoPagamento, documento } = req.body;
+  const valorNumerico = Number.parseFloat(valor);
+  const metodosValidos = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito'];
+
+  if (!Number.isFinite(valorNumerico) || valorNumerico <= 0 || !descricao || !metodosValidos.includes(metodoPagamento)) {
+    return res.status(400).json({ err: 'Preencha valor, descrição e método de pagamento válidos' });
+  }
+
+  if (documento && !documentoValido(documento)) {
+    return res.status(400).json({ err: 'CPF ou CNPJ inválido' });
+  }
+
+  const nomesMetodos = {
+    dinheiro: 'Dinheiro',
+    pix: 'PIX',
+    cartao_debito: 'Cartão de débito',
+    cartao_credito: 'Cartão de crédito'
+  };
+  const cupom = new PDFDocument({ size: [226, 500], margin: 16 });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="comprovante-caixa.pdf"');
+  cupom.pipe(res);
+
+  const dinheiro = (numero) => `R$ ${numero.toFixed(2).replace('.', ',')}`;
+  cupom.font('Helvetica-Bold').fontSize(11).text('MARAU LUZ E AGUA', { align: 'center' });
+  cupom.font('Helvetica').fontSize(7).text('COMPROVANTE DE PAGAMENTO', { align: 'center' });
+  cupom.moveDown(0.5).moveTo(16, cupom.y).lineTo(210, cupom.y).stroke();
+  cupom.moveDown().fontSize(8).text(`Data: ${new Date().toLocaleString('pt-BR')}`);
+  cupom.text(`Pagamento: ${nomesMetodos[metodoPagamento]}`);
+  if (documento) cupom.text(`CPF/CNPJ: ${documento}`);
+  cupom.moveDown().font('Helvetica-Bold').text(descricao, { width: 194 });
+  cupom.moveDown().fontSize(14).text(`TOTAL ${dinheiro(valorNumerico)}`, { align: 'center' });
+  cupom.moveDown().font('Helvetica').fontSize(7)
+    .text('Documento sem valor fiscal. A emissão de NFC-e depende de integração fiscal homologada.', { align: 'center', width: 194 });
+  cupom.end();
+});
 
 app.post('/clientes', async (req, res) => {
   const { nome, cpf, telefone, cidade, rua, numero, bairro } = req.body;
@@ -249,29 +379,50 @@ app.post('/vendas/condicional', async (req, res) => {
   }
 
   const clienteBanco = await db.connect();
+  let vendaCriada;
 
   try {
     await clienteBanco.query('BEGIN');
 
-    for (const item of itensVenda) {
-      const produto = await clienteBanco.query(
-        'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE',
-        [item.id]
-      );
-
-      if (produto.rowCount === 0) {
-        throw new Error(`Produto ${item.id} não encontrado`);
+    if (tipoPagamento === 'futuro') {
+      for (const item of itensVenda) {
+        const produto = await clienteBanco.query(
+          'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE', [item.id]
+        );
+        if (produto.rowCount === 0) throw new Error(`Produto ${item.id} não encontrado`);
+        if (Number(produto.rows[0].estoque) < item.quantidade) {
+          throw new Error(`Estoque insuficiente para o produto ${item.id}`);
+        }
+        await clienteBanco.query('UPDATE produtos SET estoque = estoque - $1 WHERE id = $2', [item.quantidade, item.id]);
       }
-
-      if (Number(produto.rows[0].estoque) < item.quantidade) {
-        throw new Error(`Estoque insuficiente para o produto ${item.id}`);
-      }
-
-      await clienteBanco.query(
-        'UPDATE produtos SET estoque = estoque - $1 WHERE id = $2',
-        [item.quantidade, item.id]
-      );
     }
+
+    const contadorDia = await clienteBanco.query(
+      `INSERT INTO venda_contadores_diarios (data_venda, ultimo_numero)
+       VALUES (CURRENT_DATE, 1)
+       ON CONFLICT (data_venda)
+       DO UPDATE SET ultimo_numero = venda_contadores_diarios.ultimo_numero + 1
+       RETURNING data_venda, ultimo_numero`
+    );
+
+    vendaCriada = await clienteBanco.query(
+      `INSERT INTO vendas (cliente_id, cliente_nome, tipo_pagamento, vencimento, desconto, subtotal, total, itens, status, data_venda_dia, numero_venda_dia)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id, cliente_nome, total, data_venda_dia, numero_venda_dia`,
+      [
+        clienteId || null,
+        clienteCadastrado?.nome || cliente || 'Consumidor',
+        tipoPagamento,
+        vencimento || null,
+        percentualDesconto,
+        subtotal,
+        total,
+        JSON.stringify(itensVenda),
+        tipoPagamento === 'avista' ? 'aguardando_pagamento' : 'finalizada',
+        contadorDia.rows[0].data_venda,
+        contadorDia.rows[0].ultimo_numero
+      ]
+    );
 
     await clienteBanco.query('COMMIT');
   } catch (err) {
@@ -282,12 +433,20 @@ app.post('/vendas/condicional', async (req, res) => {
     clienteBanco.release();
   }
 
+  if (tipoPagamento === 'avista') {
+    return res.status(202).json({
+      pendente: true,
+      venda: vendaCriada.rows[0] || null,
+      mensagem: 'Venda enviada ao Caixa para finalização do pagamento'
+    });
+  }
+
   const numeroCondicional = String(Date.now()).slice(-6);
   const dataEmissao = new Date().toLocaleDateString('pt-BR');
   const formatarValor = (valor) => `R$ ${valor.toFixed(2).replace('.', ',')}`;
   const documento = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape' });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="condicional-venda.pdf"');
+  res.setHeader('Content-Disposition', 'inline; filename="condicional-venda.pdf"');
   documento.pipe(res);
 
   const larguraVia = 382;
@@ -379,9 +538,705 @@ app.post('/vendas/condicional', async (req, res) => {
   documento.end();
 });
 
+app.get('/vendas', async (req, res) => {
+  const periodo = ['dia', 'semana', 'mes'].includes(req.query.periodo) ? req.query.periodo : 'dia';
+  const pagina = Math.max(Number.parseInt(req.query.pagina, 10) || 1, 1);
+  const limite = 10;
+  const inicio = periodo === 'dia'
+    ? "CURRENT_DATE"
+    : periodo === 'semana'
+      ? "CURRENT_DATE - INTERVAL '6 days'"
+      : "date_trunc('month', CURRENT_DATE)";
+
+  try {
+    const totalResultado = await db.query(
+      `SELECT COUNT(*)::int AS quantidade, COALESCE(SUM(total), 0)::numeric AS valor,
+              COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'pix'), 0)::numeric AS pix,
+              COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'dinheiro'), 0)::numeric AS dinheiro,
+              COALESCE(SUM(total) FILTER (WHERE tipo_pagamento IN ('boleto', 'futuro')), 0)::numeric AS boleto,
+              COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'cartao_debito'), 0)::numeric AS cartao_debito,
+              COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'cartao_credito'), 0)::numeric AS cartao_credito
+       FROM vendas
+       WHERE criado_em >= ${inicio}
+         AND status = 'finalizada'`
+    );
+    const quantidade = totalResultado.rows[0].quantidade;
+    const totalPaginas = Math.max(Math.ceil(quantidade / limite), 1);
+    const paginaAtual = Math.min(pagina, totalPaginas);
+    const offset = (paginaAtual - 1) * limite;
+    const resultado = await db.query(
+      `SELECT id, cliente_nome, tipo_pagamento, vencimento, desconto, subtotal, total,
+              valor_pago, saldo_devedor, status_pagamento, criado_em,
+              data_venda_dia, numero_venda_dia
+      FROM vendas
+       WHERE status = 'finalizada'
+         AND criado_em >= ${inicio}
+         AND status = 'finalizada'
+       ORDER BY criado_em DESC LIMIT $1 OFFSET $2`,
+      [limite, offset]
+    );
+
+    res.json({
+      vendas: resultado.rows,
+      quantidade,
+      valor: Number(totalResultado.rows[0].valor),
+      porMetodo: {
+        pix: Number(totalResultado.rows[0].pix),
+        dinheiro: Number(totalResultado.rows[0].dinheiro),
+        boleto: Number(totalResultado.rows[0].boleto),
+        cartaoDebito: Number(totalResultado.rows[0].cartao_debito),
+        cartaoCredito: Number(totalResultado.rows[0].cartao_credito)
+      },
+      pagina: paginaAtual,
+      totalPaginas
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar vendas' });
+  }
+});
+
+app.get('/vendas/:id/comprovante', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da venda inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT id, cliente_nome, tipo_pagamento, vencimento, subtotal, desconto, juros, total, itens, criado_em
+       FROM vendas WHERE id = $1`, [id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Venda não encontrada' });
+    }
+
+    const venda = resultado.rows[0];
+    const formatarValor = (valor) => `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
+    const documento = new PDFDocument({ size: [226, 520], margin: 16 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="comprovante-venda-${id}.pdf"`);
+    documento.pipe(res);
+    documento.font('Helvetica-Bold').fontSize(12).text('MARAU LUZ E AGUA', { align: 'center' });
+    documento.font('Helvetica').fontSize(8).text('COMPROVANTE DE VENDA', { align: 'center' });
+    documento.moveDown().text(`Venda #${venda.id}`);
+    documento.text(`Cliente: ${venda.cliente_nome}`);
+    documento.text(`Data: ${new Date(venda.criado_em).toLocaleString('pt-BR')}`);
+    documento.text(`Pagamento: ${venda.tipo_pagamento}`);
+    documento.moveDown().font('Helvetica-Bold').text('Itens');
+    documento.font('Helvetica');
+    for (const item of venda.itens || []) {
+      documento.text(`${item.quantidade}x ${item.nome}`);
+      documento.text(`   ${formatarValor(item.preco)} cada = ${formatarValor(item.quantidade * item.preco)}`);
+    }
+    documento.moveDown().font('Helvetica-Bold').text(`Subtotal: ${formatarValor(venda.subtotal)}`);
+    documento.text(`Desconto: ${formatarValor(Number(venda.subtotal) * Number(venda.desconto) / 100)}`);
+    documento.text(`Juros: ${formatarValor(venda.juros)}`);
+    documento.fontSize(13).text(`TOTAL: ${formatarValor(Number(venda.total) + Number(venda.juros))}`, { align: 'center' });
+    documento.moveDown().font('Helvetica').fontSize(7).text('Comprovante sem valor fiscal. NFC-e depende de emissão fiscal homologada.', { align: 'center', width: 194 });
+    documento.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao gerar comprovante' });
+  }
+});
+
+app.get('/vendas/pendentes', async (req, res) => {
+  try {
+    const resultado = await db.query(
+      `SELECT id, cliente_nome, total, itens, criado_em, data_venda_dia, numero_venda_dia
+      FROM vendas WHERE status = 'aguardando_pagamento' AND tipo_pagamento = 'avista'
+       ORDER BY criado_em ASC`
+    );
+    res.json(resultado.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar vendas pendentes' });
+  }
+});
+
+app.put('/vendas/:id/finalizar', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { metodoPagamento, documento } = req.body;
+  const metodosValidos = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito'];
+
+  if (Number.isNaN(id) || !metodosValidos.includes(metodoPagamento)) {
+    return res.status(400).json({ err: 'Venda ou método de pagamento inválido' });
+  }
+  if (documento && !documentoValido(documento)) {
+    return res.status(400).json({ err: 'CPF ou CNPJ inválido' });
+  }
+
+  const clienteBanco = await db.connect();
+  try {
+    await clienteBanco.query('BEGIN');
+    const venda = await clienteBanco.query(
+      `SELECT id, cliente_nome, total, itens FROM vendas
+       WHERE id = $1 AND status = 'aguardando_pagamento' FOR UPDATE`, [id]
+    );
+    if (venda.rowCount === 0) throw new Error('Venda pendente não encontrada');
+
+    for (const item of (venda.rows[0].itens || [])) {
+      const produto = await clienteBanco.query(
+        'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE', [item.id]
+      );
+      if (produto.rowCount === 0 || Number(produto.rows[0].estoque) < item.quantidade) {
+        throw new Error(`Estoque insuficiente para ${item.nome}`);
+      }
+      await clienteBanco.query(
+        'UPDATE produtos SET estoque = estoque - $1 WHERE id = $2', [item.quantidade, item.id]
+      );
+    }
+
+    const atualizada = await clienteBanco.query(
+      `UPDATE vendas SET status = 'finalizada', tipo_pagamento = $1
+       WHERE id = $2 RETURNING id, cliente_nome, total`, [metodoPagamento, id]
+    );
+    await clienteBanco.query('COMMIT');
+    res.json(atualizada.rows[0]);
+  } catch (err) {
+    await clienteBanco.query('ROLLBACK');
+    res.status(400).json({ err: err.message });
+  } finally {
+    clienteBanco.release();
+  }
+});
+
+app.delete('/vendas/:id/cancelar', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da venda inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `DELETE FROM vendas
+       WHERE id = $1
+         AND status = 'aguardando_pagamento'
+         AND tipo_pagamento = 'avista'
+       RETURNING id`,
+      [id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Venda pendente não encontrada para cancelamento' });
+    }
+
+    res.json({ id: resultado.rows[0].id, cancelada: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao cancelar venda pendente' });
+  }
+});
+
+app.put('/vendas/:id/pagamento', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { tipoPagamento, vencimento } = req.body;
+
+  if (Number.isNaN(id) || !['avista', 'futuro'].includes(tipoPagamento)) {
+    return res.status(400).json({ err: 'Pagamento inválido' });
+  }
+
+  if (tipoPagamento === 'futuro' && !vencimento) {
+    return res.status(400).json({ err: 'Informe o vencimento do pagamento futuro' });
+  }
+
+  try {
+    const venda = await db.query('SELECT cliente_id FROM vendas WHERE id = $1', [id]);
+
+    if (venda.rowCount === 0) {
+      return res.status(404).json({ err: 'Venda não encontrada' });
+    }
+
+    if (tipoPagamento === 'futuro' && !venda.rows[0].cliente_id) {
+      return res.status(400).json({ err: 'Pagamento futuro exige cliente cadastrado' });
+    }
+
+    const resultado = await db.query(
+      `UPDATE vendas
+       SET tipo_pagamento = $1, vencimento = $2
+       WHERE id = $3
+       RETURNING id, cliente_nome, tipo_pagamento, vencimento, total, criado_em`,
+      [tipoPagamento, tipoPagamento === 'futuro' ? vencimento : null, id]
+    );
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao editar pagamento' });
+  }
+});
+
+app.delete('/vendas/:id', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da venda inválido' });
+  }
+
+  const clienteBanco = await db.connect();
+  try {
+    await clienteBanco.query('BEGIN');
+    const venda = await clienteBanco.query(
+      `SELECT id, itens, status FROM vendas WHERE id = $1 FOR UPDATE`, [id]
+    );
+
+    if (venda.rowCount === 0) {
+      throw new Error('Venda não encontrada');
+    }
+    if (venda.rows[0].status !== 'finalizada') {
+      throw new Error('Somente vendas finalizadas podem ser excluídas');
+    }
+
+    const devolucao = await clienteBanco.query(
+      'SELECT 1 FROM devolucoes WHERE venda_id = $1 LIMIT 1', [id]
+    );
+    if (devolucao.rowCount > 0) {
+      throw new Error('Não é possível excluir uma venda que possui devolução');
+    }
+
+    for (const item of venda.rows[0].itens || []) {
+      await clienteBanco.query(
+        'UPDATE produtos SET estoque = estoque + $1 WHERE id = $2',
+        [item.quantidade, item.id]
+      );
+    }
+
+    await clienteBanco.query('DELETE FROM vendas WHERE id = $1', [id]);
+    await clienteBanco.query('COMMIT');
+    res.status(204).send();
+  } catch (err) {
+    await clienteBanco.query('ROLLBACK');
+    res.status(400).json({ err: err.message });
+  } finally {
+    clienteBanco.release();
+  }
+});
+
+app.get('/cobrancas/atrasadas', async (req, res) => {
+  await sincronizarPagamentosAsaas();
+
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_id, v.cliente_nome, c.telefone, v.vencimento,
+              v.total, v.juros, v.total + v.juros AS total_atualizado
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'
+         AND v.vencimento < CURRENT_DATE
+       ORDER BY v.vencimento ASC
+       LIMIT 10`
+    );
+    res.json(resultado.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar cobranças atrasadas' });
+  }
+});
+
+app.post('/cobrancas/sincronizar', async (req, res) => {
+  await sincronizarPagamentosAsaas();
+  res.json({ sincronizado: true });
+});
+
+app.put('/cobrancas/:id/juros', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const percentual = Number.parseFloat(req.body.percentual);
+
+  if (Number.isNaN(id) || !Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+    return res.status(400).json({ err: 'Percentual de juros inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `UPDATE vendas
+       SET juros = total * $1 / 100
+       WHERE id = $2 AND tipo_pagamento = 'futuro'
+       RETURNING id, total, juros, total + juros AS total_atualizado`,
+      [percentual, id]
+    );
+    if (resultado.rowCount === 0) return res.status(404).json({ err: 'Cobrança não encontrada' });
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao aplicar juros' });
+  }
+});
+
+app.post('/cobrancas/:id/asaas', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da cobrança inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_id, v.cliente_nome, v.total, v.juros,
+              c.nome, c.cpf, c.telefone
+       FROM vendas v
+       JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.id = $1 AND v.tipo_pagamento = 'futuro'
+         AND v.status_pagamento = 'pendente'`,
+      [id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Cobrança pendente não encontrada' });
+    }
+
+    const venda = resultado.rows[0];
+    const cobranca = await criarCobranca(
+      { id: venda.cliente_id, nome: venda.nome, cpf: venda.cpf, telefone: venda.telefone },
+      Number(venda.total) + Number(venda.juros),
+      `Cobrança da venda #${venda.id}`
+    );
+
+    res.json({
+      id: cobranca.id,
+      status: cobranca.status,
+      invoiceUrl: cobranca.invoiceUrl,
+      bankSlipUrl: cobranca.bankSlipUrl
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ err: err.message });
+  }
+});
+
+app.get('/cobrancas-prazo', async (req, res) => {
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_id, v.cliente_nome, v.vencimento, v.total, v.juros, v.valor_pago, v.itens,
+              v.data_venda_dia, v.numero_venda_dia,
+              GREATEST(v.total + v.juros - COALESCE(v.valor_pago, 0), 0)::numeric AS valor_aberto
+       FROM vendas v
+       WHERE v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'
+       ORDER BY v.cliente_nome, v.criado_em ASC`
+    );
+    const clientes = new Map();
+    for (const venda of resultado.rows) {
+      if (!clientes.has(venda.cliente_id)) {
+        clientes.set(venda.cliente_id, { id: venda.cliente_id, nome: venda.cliente_nome, vendas: [] });
+      }
+      clientes.get(venda.cliente_id).vendas.push(venda);
+    }
+    res.json([...clientes.values()].slice(0, 10));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar cobranças a prazo' });
+  }
+});
+
+app.post('/cobrancas-prazo/asaas', async (req, res) => {
+  const clienteId = Number.parseInt(req.body.clienteId, 10);
+  const vendaIds = Array.isArray(req.body.vendaIds) ? req.body.vendaIds.map((id) => Number.parseInt(id, 10)) : [];
+  const valorInformado = req.body.valor === '' || req.body.valor == null
+    ? null
+    : Number.parseFloat(req.body.valor);
+
+  if (Number.isNaN(clienteId) || vendaIds.length === 0 || (valorInformado !== null && (!Number.isFinite(valorInformado) || valorInformado <= 0))) {
+    return res.status(400).json({ err: 'Selecione cliente, compras e um valor válido' });
+  }
+
+  try {
+    const vendas = await db.query(
+      `SELECT v.id, v.cliente_id, v.total, v.juros, c.nome, c.cpf, c.telefone
+       FROM vendas v JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.id = ANY($1::int[]) AND v.cliente_id = $2
+         AND v.tipo_pagamento = 'futuro' AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'`,
+      [vendaIds, clienteId]
+    );
+    if (vendas.rows.length !== vendaIds.length) {
+      return res.status(400).json({ err: 'Uma ou mais compras não estão disponíveis' });
+    }
+
+    const primeira = vendas.rows[0];
+    const totalSelecionado = vendas.rows.reduce((soma, venda) => soma + Number(venda.total) + Number(venda.juros), 0);
+    if (valorInformado !== null && valorInformado > totalSelecionado) {
+      return res.status(400).json({ err: 'O valor escolhido não pode ser maior que o total selecionado' });
+    }
+    const total = valorInformado ?? totalSelecionado;
+    const grupoId = `parcelamento-${clienteId}-${Date.now()}`;
+    const cobranca = await criarCobrancaUnica(
+      { id: clienteId, nome: primeira.nome, cpf: primeira.cpf, telefone: primeira.telefone },
+      total,
+      `Cobrança de ${vendaIds.length} compra(s) a prazo`,
+      grupoId
+    );
+
+    await db.query(
+      `INSERT INTO cobrancas_asaas (grupo_id, asaas_payment_id, cliente_id, venda_ids, valor_cobrado)
+        SELECT $1, payment_id, $2, $3::int[], $5
+       FROM unnest($4::text[]) AS payment_id`,
+      [grupoId, clienteId, vendaIds, [cobranca.id], total]
+    );
+
+    res.json({ total, cobrancas: [{ id: cobranca.id, invoiceUrl: cobranca.invoiceUrl, bankSlipUrl: cobranca.bankSlipUrl }] });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ err: err.message });
+  }
+});
+
+app.post('/webhooks/asaas', async (req, res) => {
+  const evento = req.body.event;
+  const pagamento = req.body.payment;
+  const eventosMonitorados = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_PARTIALLY_RECEIVED'];
+
+  if (!pagamento?.id || !eventosMonitorados.includes(evento)) {
+    return res.status(204).send();
+  }
+
+  try {
+    await sincronizarPagamentosAsaas(pagamento.id);
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao processar webhook Asaas' });
+  }
+});
+
+app.put('/cobrancas-prazo/finalizar', async (req, res) => {
+  const clienteId = Number.parseInt(req.body.clienteId, 10);
+  const vendaIds = Array.isArray(req.body.vendaIds)
+    ? req.body.vendaIds.map((id) => Number.parseInt(id, 10))
+    : [];
+  const metodoPagamento = String(req.body.metodoPagamento || '');
+  const metodosValidos = ['dinheiro', 'pix', 'cartao_credito', 'cartao_debito', 'boleto'];
+
+  if (Number.isNaN(clienteId) || vendaIds.length === 0 || vendaIds.some(Number.isNaN) || !metodosValidos.includes(metodoPagamento)) {
+    return res.status(400).json({ err: 'Selecione vendas e um método de pagamento válido' });
+  }
+
+  if (metodoPagamento === 'boleto') {
+    return res.status(400).json({ err: 'Boletos são finalizados automaticamente após a confirmação do Asaas' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `UPDATE vendas
+       SET status_pagamento = 'pago', tipo_pagamento = $1, pago_em = CURRENT_TIMESTAMP,
+           valor_pago = total + juros, saldo_devedor = 0
+       WHERE id = ANY($2::int[]) AND cliente_id = $3
+         AND tipo_pagamento = 'futuro' AND status = 'finalizada'
+         AND status_pagamento = 'pendente'
+       RETURNING id`,
+      [metodoPagamento, vendaIds, clienteId]
+    );
+
+    if (resultado.rowCount !== vendaIds.length) {
+      return res.status(400).json({ err: 'Uma ou mais vendas não estão disponíveis para finalização' });
+    }
+
+    res.json({ vendaIds: resultado.rows.map((venda) => venda.id) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao finalizar vendas' });
+  }
+});
+
+app.put('/cobrancas/:id/pagar', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const comJuros = req.body.comJuros === true;
+  const percentual = Number.parseFloat(req.body.percentual) || 0;
+
+  if (Number.isNaN(id) || percentual < 0 || percentual > 100) {
+    return res.status(400).json({ err: 'Dados de pagamento inválidos' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `UPDATE vendas
+       SET juros = CASE WHEN $1 THEN total * $2 / 100 ELSE 0 END,
+           status_pagamento = 'pago', pago_em = CURRENT_TIMESTAMP
+       WHERE id = $3 AND status_pagamento = 'pendente'
+       RETURNING id, total, juros, total + juros AS total_pago, pago_em`,
+      [comJuros, percentual, id]
+    );
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Cobrança não encontrada ou já paga' });
+    }
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao marcar cobrança como paga' });
+  }
+});
+
+app.get('/devolucoes/clientes', async (req, res) => {
+  const busca = String(req.query.busca || '').trim().toLowerCase();
+  try {
+    const vendas = await db.query(
+      `SELECT cliente_id, cliente_nome, itens FROM vendas
+       WHERE status = 'finalizada'
+         AND tipo_pagamento = 'futuro'
+         AND status_pagamento = 'pendente'
+         AND cliente_id IS NOT NULL`
+    );
+    const devolvidas = await db.query(
+      `SELECT d.cliente_id, d.produto_id, SUM(d.quantidade)::int AS quantidade
+       FROM devolucoes d
+       JOIN vendas v ON v.id = d.venda_id
+       WHERE d.venda_id IS NOT NULL
+         AND v.status = 'finalizada'
+         AND v.tipo_pagamento = 'futuro'
+         AND v.status_pagamento = 'pendente'
+       GROUP BY d.cliente_id, d.produto_id`
+    );
+    const mapaDevolvidas = new Map(
+      devolvidas.rows.map((item) => [`${item.cliente_id}:${item.produto_id}`, item.quantidade])
+    );
+    const clientes = new Map();
+
+    for (const venda of vendas.rows) {
+      if (!clientes.has(venda.cliente_id)) {
+        clientes.set(venda.cliente_id, { id: venda.cliente_id, nome: venda.cliente_nome, produtos: new Map() });
+      }
+      const cliente = clientes.get(venda.cliente_id);
+      for (const item of venda.itens || []) {
+        const atual = cliente.produtos.get(item.id) || { id: item.id, nome: item.nome, quantidade: 0 };
+        atual.quantidade += Number(item.quantidade) || 0;
+        cliente.produtos.set(item.id, atual);
+      }
+    }
+
+    res.json([...clientes.values()]
+      .map((cliente) => ({
+        ...cliente,
+        produtos: [...cliente.produtos.values()]
+          .map((item) => ({ ...item, quantidade: item.quantidade - (mapaDevolvidas.get(`${cliente.id}:${item.id}`) || 0) }))
+          .filter((item) => item.quantidade > 0)
+      }))
+      .filter((cliente) => !busca || cliente.nome.toLowerCase().includes(busca))
+      .filter((cliente) => cliente.produtos.length > 0)
+      .slice(0, 10));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar devoluções' });
+  }
+});
+
+app.post('/devolucoes', async (req, res) => {
+  const clienteId = Number.parseInt(req.body.clienteId, 10);
+  const itens = Array.isArray(req.body.itens) ? req.body.itens : [];
+
+  if (Number.isNaN(clienteId) || itens.length === 0) {
+    return res.status(400).json({ err: 'Selecione um cliente e ao menos um produto' });
+  }
+
+  const clienteBanco = await db.connect();
+  try {
+    await clienteBanco.query('BEGIN');
+    for (const item of itens) {
+      const produtoId = Number.parseInt(item.produtoId, 10);
+      const quantidade = Number.parseInt(item.quantidade, 10);
+      if (Number.isNaN(produtoId) || Number.isNaN(quantidade) || quantidade <= 0) {
+        throw new Error('Produto ou quantidade inválida');
+      }
+
+      const disponibilidade = await clienteBanco.query(
+        `SELECT COALESCE(SUM((item->>'quantidade')::int), 0)::int AS vendido
+         FROM vendas v, jsonb_array_elements(v.itens) item
+         WHERE v.cliente_id = $1
+           AND v.status = 'finalizada'
+           AND v.tipo_pagamento = 'futuro'
+           AND v.status_pagamento = 'pendente'
+           AND (item->>'id')::int = $2`, [clienteId, produtoId]
+      );
+      const vendaOrigem = await clienteBanco.query(
+        `SELECT v.id
+         FROM vendas v, jsonb_array_elements(v.itens) item
+         WHERE v.cliente_id = $1
+           AND v.status = 'finalizada'
+           AND v.tipo_pagamento = 'futuro'
+           AND v.status_pagamento = 'pendente'
+           AND (item->>'id')::int = $2
+         ORDER BY v.criado_em ASC LIMIT 1`, [clienteId, produtoId]
+      );
+      if (vendaOrigem.rowCount === 0) throw new Error('Venda de origem não encontrada');
+      const devolvido = await clienteBanco.query(
+        'SELECT COALESCE(SUM(quantidade), 0)::int AS total FROM devolucoes WHERE cliente_id = $1 AND produto_id = $2',
+        [clienteId, produtoId]
+      );
+      const disponivel = disponibilidade.rows[0].vendido - devolvido.rows[0].total;
+      if (quantidade > disponivel) throw new Error('Quantidade maior que o disponível para devolução');
+
+      await clienteBanco.query('UPDATE produtos SET estoque = estoque + $1 WHERE id = $2', [quantidade, produtoId]);
+      await clienteBanco.query(
+        'INSERT INTO devolucoes (cliente_id, venda_id, produto_id, quantidade) VALUES ($1, $2, $3, $4)',
+        [clienteId, vendaOrigem.rows[0].id, produtoId, quantidade]
+      );
+    }
+
+    const restante = await clienteBanco.query(
+      `WITH vendidos AS (
+        SELECT (item->>'id')::int AS produto_id, SUM((item->>'quantidade')::int)::int AS quantidade
+        FROM vendas v, jsonb_array_elements(v.itens) item
+        WHERE v.cliente_id = $1
+          AND v.status = 'finalizada'
+          AND v.tipo_pagamento = 'futuro'
+          AND v.status_pagamento = 'pendente'
+        GROUP BY (item->>'id')::int
+      ), devolvidos AS (
+        SELECT d.produto_id, SUM(d.quantidade)::int AS quantidade
+        FROM devolucoes d
+        JOIN vendas v ON v.id = d.venda_id
+        WHERE d.cliente_id = $1
+          AND v.status = 'finalizada'
+          AND v.tipo_pagamento = 'futuro'
+          AND v.status_pagamento = 'pendente'
+        GROUP BY d.produto_id
+      )
+      SELECT 1 FROM vendidos v
+      LEFT JOIN devolvidos d ON d.produto_id = v.produto_id
+      WHERE v.quantidade > COALESCE(d.quantidade, 0)
+      LIMIT 1`,
+      [clienteId]
+    );
+
+    let vendaCancelada = false;
+    if (restante.rowCount === 0) {
+      await clienteBanco.query(
+        `UPDATE vendas SET status = 'cancelada'
+         WHERE cliente_id = $1
+           AND status = 'finalizada'
+           AND tipo_pagamento = 'futuro'
+           AND status_pagamento = 'pendente'`,
+        [clienteId]
+      );
+      vendaCancelada = true;
+    }
+
+    await clienteBanco.query('COMMIT');
+    res.json({
+      mensagem: vendaCancelada
+        ? 'Devolução registrada. A venda foi totalmente devolvida e removida do total de vendas.'
+        : 'Devolução registrada e estoque atualizado',
+      vendaCancelada
+    });
+  } catch (err) {
+    await clienteBanco.query('ROLLBACK');
+    res.status(400).json({ err: err.message });
+  } finally {
+    clienteBanco.release();
+  }
+});
+
 
 app.get('/', (req, res) => {
   res.send('Servidor esta rodando'); // cria a primeira rota do servidor, quando algume acessa (/), o servidor responde enviando a mensagem 
+});
+
+app.get('/whatsapp/status', (req, res) => {
+  res.json(obterStatusWhatsApp());
 });
 
 
@@ -618,6 +1473,10 @@ app.delete('/produtos/:id', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('servidor esta rodando na PORT 3000'); // define em qual prota do servidor vai rodar, e deixa o console ouvindo para saber se deu tudo certo 
-
-})
+  conectarWhatsApp().catch((err) => console.error('Erro ao conectar WhatsApp:', err));
+  enviarAvisosDeVencimento();
+  sincronizarPagamentosAsaas();
+  setInterval(enviarAvisosDeVencimento, 60 * 60 * 1000);
+  setInterval(sincronizarPagamentosAsaas, 5 * 60 * 1000);
+});
 

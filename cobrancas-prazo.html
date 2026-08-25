@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Pagamentos a prazo - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card cobrancas-prazo-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Pagamentos a prazo</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="cobrancas-prazo-content">
+      <div class="vendas-total-header">
+        <div>
+          <p class="hub-kicker">Asaas Sandbox</p>
+          <h2>Gerar boleto por cliente</h2>
+        </div>
+        <div class="contador-vendas"><span id="quantidadeClientes">0</span><small>cliente(s)</small></div>
+      </div>
+      <p id="mensagemPrazo" class="mensagem-venda" role="status"></p>
+      <div id="listaClientesPrazo" class="lista-clientes-prazo"></div>
+      <p id="prazoVazio" class="estado-vazio">Nenhuma compra a prazo pendente.</p>
+    </section>
+  </main>
+  <script src="cobrancas-prazo.js"></script>
+</body>
+
+</html>

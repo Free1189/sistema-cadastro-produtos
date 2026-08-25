@@ -1,0 +1,8 @@
+Erro ao conectar WhatsApp: Error: Configure WHATSAPP_META_TOKEN e WHATSAPP_META_PHONE_NUMBER_ID para usar a API da Meta
+    at conectarWhatsApp (C:\Users\guilh\Desktop\sistema-cadastro\server\whatsapp.js:79:13)
+    at Server.<anonymous> (C:\Users\guilh\Desktop\sistema-cadastro\server\index.js:1451:3)
+    at Server.f (C:\Users\guilh\Desktop\sistema-cadastro\server\node_modules\once\once.js:25:25)
+    at Object.onceWrapper (node:events:631:26)
+    at Server.emit (node:events:509:28)
+    at emitErrorNT (node:net:2203:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)

@@ -1,0 +1,5 @@
+◇ injected env (16) from server\.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+◇ injected env (0) from server\.env // tip: ⌁ auth for agents [www.vestauth.com]
+servidor esta rodando na PORT 3000
+ conectado com sucesso ! 

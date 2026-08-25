@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Caixa - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card caixa-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Fechamento de caixa</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="caixa-content">
+      <div class="venda-cabecalho">
+        <div>
+          <p class="hub-kicker">Finalização</p>
+          <h2>Receber venda</h2>
+        </div>
+        <p id="mensagemCaixa" class="mensagem-venda" role="status"></p>
+      </div>
+
+      <div id="vendasPendentes" class="vendas-pendentes"></div>
+      <p id="caixaVazio" class="estado-vazio">Nenhuma venda aguardando finalização.</p>
+    </section>
+  </main>
+  <script src="caixa.js"></script>
+</body>
+
+</html>

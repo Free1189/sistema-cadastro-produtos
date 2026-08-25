@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Cobranças - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card cobrancas-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Cobrança de clientes</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="cobrancas-content">
+      <div class="vendas-total-header">
+        <div>
+          <p class="hub-kicker">Contas vencidas</p>
+          <h2>Clientes em atraso</h2>
+        </div>
+        <div class="contador-vendas">
+          <span id="quantidadeCobrancas">0</span>
+          <small>cobrança(s)</small>
+        </div>
+      </div>
+      <p id="mensagemCobranca" class="mensagem-venda" role="status"></p>
+      <div id="listaCobrancas" class="lista-cobrancas"></div>
+      <p id="cobrancasVazio" class="estado-vazio">Nenhuma cobrança em atraso.</p>
+    </section>
+  </main>
+  <script src="cobrancas.js"></script>
+</body>
+
+</html>

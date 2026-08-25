@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Devoluções - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card devolucoes-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Devoluções</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="devolucoes-content">
+      <div class="venda-cabecalho">
+        <div>
+          <p class="hub-kicker">Pós-venda</p>
+          <h2>Selecionar cliente</h2>
+        </div>
+        <p id="mensagemDevolucao" class="mensagem-venda" role="status"></p>
+      </div>
+      <div class="busca-devolucao">
+        <label for="buscaClienteDevolucao">Localizar cliente</label>
+        <input type="search" id="buscaClienteDevolucao" placeholder="Nome ou CPF">
+      </div>
+      <div id="listaClientesDevolucao" class="clientes-devolucao"></div>
+      <p id="devolucoesVazio" class="estado-vazio">Nenhum cliente com venda a prazo disponível para devolução.</p>
+
+      <section id="produtosDevolucao" class="produtos-devolucao" hidden>
+        <div class="devolucao-selecionada">
+          <h3 id="clienteSelecionado"></h3>
+          <button type="button" id="btnTrocarCliente" class="btn-secundario">Trocar cliente</button>
+        </div>
+        <div id="listaProdutosDevolucao" class="lista-produtos-devolucao"></div>
+        <button type="button" id="btnConfirmarDevolucao" class="btn-salvar">Confirmar devolução</button>
+      </section>
+    </section>
+  </main>
+  <script src="devolucoes.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Total de vendas - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card vendas-total-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Total de vendas</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="vendas-total-content">
+      <div class="vendas-total-header">
+        <div>
+          <p class="hub-kicker">Relatório comercial</p>
+          <h2>Vendas realizadas</h2>
+        </div>
+        <div class="contador-vendas">
+          <span id="quantidadeVendas">0</span>
+          <small>vendas no período</small>
+        </div>
+      </div>
+
+      <div class="abas-vendas" role="tablist" aria-label="Período das vendas">
+        <button type="button" class="aba-venda ativa" data-periodo="dia" role="tab">Hoje</button>
+        <button type="button" class="aba-venda" data-periodo="semana" role="tab">Semana</button>
+        <button type="button" class="aba-venda" data-periodo="mes" role="tab">Mês</button>
+      </div>
+
+      <div class="resumo-periodo">
+        <span>Valor total no período</span>
+        <strong id="valorVendas">R$ 0,00</strong>
+      </div>
+
+      <div class="totais-metodos-vendas">
+        <div><span>PIX</span><strong id="totalPix">R$ 0,00</strong></div>
+        <div><span>Dinheiro</span><strong id="totalDinheiro">R$ 0,00</strong></div>
+        <div><span>Boleto</span><strong id="totalBoleto">R$ 0,00</strong></div>
+        <div><span>Cartão de débito</span><strong id="totalCartaoDebito">R$ 0,00</strong></div>
+        <div><span>Cartão de crédito</span><strong id="totalCartaoCredito">R$ 0,00</strong></div>
+      </div>
+
+      <div class="tabela-responsive">
+        <table class="tabela-produtos tabela-vendas-total">
+          <thead>
+            <tr>
+              <th>Registro</th>
+              <th>Cliente</th>
+              <th>Pagamento</th>
+              <th>Data</th>
+              <th>Total</th>
+              <th>Pagamento</th>
+              <th>Status</th>
+              <th>Comprovante</th>
+              <th>Ação</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="listaVendas"></tbody>
+        </table>
+      </div>
+      <p id="vendasVazio" class="estado-vazio">Nenhuma venda encontrada neste período.</p>
+
+      <div class="paginacao-produtos">
+        <button type="button" id="paginaAnteriorVendas" class="btn-paginacao">Anterior</button>
+        <span id="informacaoPaginaVendas">Página 1 de 1</span>
+        <button type="button" id="paginaProximaVendas" class="btn-paginacao">Próxima</button>
+      </div>
+    </section>
+  </main>
+  <script src="vendas-total.js"></script>
+</body>
+
+</html>
