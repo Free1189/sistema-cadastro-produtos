@@ -12,7 +12,6 @@ btnSair.addEventListener('click', () => {
 });
 
 const perfil = sessionStorage.getItem('perfil');
-const perfisComAcessoTotal = ['admin', 'relatorios'];
 
 const acessoNegado = sessionStorage.getItem('acessoNegado');
 if (acessoNegado) {
@@ -22,7 +21,7 @@ if (acessoNegado) {
 
 document.querySelectorAll('.hub-card').forEach((card) => {
   card.addEventListener('click', (evento) => {
-    if (card.dataset.perfil === 'admin' && !perfisComAcessoTotal.includes(perfil)) {
+    if (card.dataset.perfil === 'admin' && perfil !== 'admin') {
       evento.preventDefault();
       alert('Acesso negado: seu perfil não tem permissão para esta área.');
       return;

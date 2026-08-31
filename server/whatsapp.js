@@ -1,15 +1,22 @@
+const fs = require('fs/promises');
 const path = require('path');
-const qrcodeTerminal = require('qrcode-terminal');
-const QRCode = require('qrcode');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const P = require('pino');
+const qrcode = require('qrcode-terminal');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 
-const QR_IMAGE_PATH = path.join(__dirname, 'whatsapp-qr.png');
-const AUTH_DIR = path.join(__dirname, '..', '.wwebjs_auth');
+const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
 
-let client = null;
+let socket;
+let qrExibido = false;
 let conectando = false;
 let reconnectTimeout = null;
+let versaoConexao = 0;
+let tentativasConsecutivas = 0;
+let historicoDesconexao = [];
+let codigoPareamentoSolicitado = false;
+let usarPareamentoNumero = true;
 let statusConexao = {
   conectado: false,
   estado: 'inicializando',
@@ -18,7 +25,7 @@ let statusConexao = {
 };
 
 function providerWhatsApp() {
-  return String(process.env.WHATSAPP_PROVIDER || 'webjs').trim().toLowerCase();
+  return String(process.env.WHATSAPP_PROVIDER || 'baileys').trim().toLowerCase();
 }
 
 function tokenMeta() {
@@ -35,6 +42,31 @@ function atualizarStatus(parcial) {
     ...parcial,
     ultimaAtualizacao: new Date().toISOString()
   };
+}
+
+async function resetarSessaoWhatsApp() {
+  try {
+    await fs.rm(AUTH_DIR, { recursive: true, force: true });
+    console.warn('Sessao do WhatsApp foi resetada para gerar novo pareamento via QR.');
+  } catch (err) {
+    console.error('Nao foi possivel resetar a sessao do WhatsApp:', err.message);
+  }
+}
+
+function registrarDesconexao(codigo) {
+  const agora = Date.now();
+  historicoDesconexao.push({ codigo, ts: agora });
+  historicoDesconexao = historicoDesconexao.filter((item) => agora - item.ts <= 120000);
+  const instaveis = historicoDesconexao.filter((item) => item.codigo === 440 || item.codigo === 515).length;
+  return instaveis;
+}
+
+function numeroPareamento() {
+  const numero = String(process.env.WHATSAPP_PAIRING_NUMBER || '').replace(/\D/g, '');
+  if (!numero) return null;
+  const normalizado = numero.startsWith('55') ? numero : `55${numero}`;
+  if (normalizado.length < 12 || normalizado.length > 13) return null;
+  return normalizado;
 }
 
 async function conectarWhatsApp() {
@@ -56,67 +88,110 @@ async function conectarWhatsApp() {
     return null;
   }
 
-  if (conectando) return client;
-  if (client && statusConexao.conectado) return client;
+  if (conectando) return socket;
+  if (socket && statusConexao.conectado) return socket;
 
   conectando = true;
+  const tentativaAtual = ++versaoConexao;
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
 
   atualizarStatus({ estado: 'conectando', conectado: false });
+  codigoPareamentoSolicitado = false;
+  const { state, saveCreds } = await useMultiFileAuthState(path.join(__dirname, 'auth_info_baileys'));
+  const { version } = await fetchLatestBaileysVersion();
+  const numeroCodigo = usarPareamentoNumero ? numeroPareamento() : null;
 
-  client = new Client({
-    authStrategy: new LocalAuth({ dataPath: AUTH_DIR }),
-    puppeteer: {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+  socket = makeWASocket({
+    version,
+    auth: state,
+    logger: P({ level: 'silent' }),
+    printQRInTerminal: false,
+    browser: ['Marau Sistema', 'Chrome', '1.0.0'],
+    syncFullHistory: false,
+    markOnlineOnConnect: false
+  });
+
+  socket.ev.on('creds.update', saveCreds);
+  socket.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (tentativaAtual !== versaoConexao) return;
+
+    if (connection === 'connecting' && numeroCodigo && !codigoPareamentoSolicitado) {
+      codigoPareamentoSolicitado = true;
+      atualizarStatus({ estado: 'aguardando_codigo', conectado: false });
+      socket.requestPairingCode(numeroCodigo)
+        .then((codigo) => {
+          const codigoLimpo = String(codigo || '').replace(/(.{4})/g, '$1 ').trim();
+          console.log(`Codigo de pareamento WhatsApp (${numeroCodigo}): ${codigoLimpo}`);
+          console.log('No celular: WhatsApp > Dispositivos conectados > Conectar com numero de telefone.');
+        })
+        .catch((err) => {
+          codigoPareamentoSolicitado = false;
+          usarPareamentoNumero = false;
+          atualizarStatus({ estado: 'aguardando_qr', conectado: false });
+          console.error('Falha ao gerar codigo de pareamento. Voltando para QR:', err.message);
+        });
+    }
+
+    if (qr && !qrExibido) {
+      if (numeroCodigo) return;
+      qrExibido = true;
+      atualizarStatus({ estado: 'aguardando_qr', conectado: false });
+      console.log('Escaneie este QR Code com o WhatsApp conectado:');
+      qrcode.generate(qr, { small: true });
+    }
+
+    if (connection === 'open') {
+      conectando = false;
+      tentativasConsecutivas = 0;
+      historicoDesconexao = [];
+      qrExibido = false;
+      atualizarStatus({ estado: 'conectado', conectado: true, ultimoCodigoDesconexao: null });
+      console.log('WhatsApp conectado para cobranças automáticas.');
+    }
+
+    if (connection === 'close') {
+      conectando = false;
+      const codigo = lastDisconnect?.error?.output?.statusCode;
+      tentativasConsecutivas += 1;
+      const desconexoesInstaveis = registrarDesconexao(codigo || 0);
+      qrExibido = false;
+      atualizarStatus({ estado: 'desconectado', conectado: false, ultimoCodigoDesconexao: codigo || null });
+      // 440 = sessão substituída por outra instância; reconectar piora o loop
+      const conexaoSubstituida = codigo === 440;
+      const reinicioRequerido = codigo === 515;
+
+      if (codigo === DisconnectReason.loggedOut || conexaoSubstituida) {
+        console.error(`WhatsApp desconectado permanentemente (codigo: ${codigo}). Resetando sessao para novo QR...`);
+        atualizarStatus({ estado: 'reautenticando_qr', conectado: false });
+        resetarSessaoWhatsApp().then(() => {
+          tentativasConsecutivas = 0;
+          historicoDesconexao = [];
+          reconnectTimeout = setTimeout(() => {
+            reconnectTimeout = null;
+            conectarWhatsApp().catch((err) => console.error('Erro na reconexão:', err.message));
+          }, 8000);
+        });
+      } else if (reinicioRequerido || codigo !== DisconnectReason.loggedOut) {
+        const atraso = Math.min(5000 * tentativasConsecutivas, 30000);
+        console.warn(`WhatsApp desconectou (codigo: ${codigo || 'desconhecido'}). Nova tentativa em ${Math.round(atraso / 1000)}s.`);
+        reconnectTimeout = setTimeout(() => {
+          reconnectTimeout = null;
+          conectarWhatsApp().catch((err) => console.error('Erro na reconexão:', err.message));
+        }, atraso);
+      }
     }
   });
 
-  client.on('qr', (qr) => {
-    atualizarStatus({ estado: 'aguardando_qr', conectado: false });
-    QRCode.toFile(QR_IMAGE_PATH, qr, { width: 320 })
-      .catch((err) => console.error('Erro ao salvar imagem do QR Code:', err.message));
-    console.log('Escaneie este QR Code com o WhatsApp conectado (abra http://localhost:3000/whatsapp/qr no navegador):');
-    qrcodeTerminal.generate(qr, { small: true });
-  });
+  return socket;
+}
 
-  client.on('authenticated', () => {
-    atualizarStatus({ estado: 'autenticado', conectado: false });
-    console.log('WhatsApp autenticado, finalizando conexão...');
-  });
-
-  client.on('auth_failure', (mensagem) => {
-    atualizarStatus({ estado: 'falha_autenticacao', conectado: false });
-    console.error('Falha na autenticação do WhatsApp:', mensagem);
-  });
-
-  client.on('ready', () => {
-    conectando = false;
-    atualizarStatus({ estado: 'conectado', conectado: true, ultimoCodigoDesconexao: null });
-    console.log('WhatsApp conectado para cobranças automáticas.');
-  });
-
-  client.on('disconnected', (motivo) => {
-    conectando = false;
-    atualizarStatus({ estado: 'desconectado', conectado: false, ultimoCodigoDesconexao: motivo || null });
-    console.warn('WhatsApp desconectou:', motivo);
-    client = null;
-    reconnectTimeout = setTimeout(() => {
-      reconnectTimeout = null;
-      conectarWhatsApp().catch((err) => console.error('Erro na reconexão:', err.message));
-    }, 8000);
-  });
-
-  client.initialize().catch((err) => {
-    conectando = false;
-    atualizarStatus({ estado: 'erro_conexao', conectado: false });
-    console.error('Erro ao inicializar o WhatsApp:', err.message);
-  });
-
-  return client;
+function telefoneParaJid(telefone) {
+  const numeros = String(telefone || '').replace(/\D/g, '');
+  if (numeros.length < 10) return null;
+  return `${numeros.startsWith('55') ? numeros : `55${numeros}`}@s.whatsapp.net`;
 }
 
 async function enviarCobranca(telefone, mensagem) {
@@ -149,15 +224,10 @@ async function enviarCobranca(telefone, mensagem) {
     return resultado;
   }
 
-  if (!client || !statusConexao.conectado) throw new Error('WhatsApp ainda não está conectado');
-  const numeros = String(telefone || '').replace(/\D/g, '');
-  if (numeros.length < 10) throw new Error('Telefone do cliente inválido');
-  const numeroCompleto = numeros.startsWith('55') ? numeros : `55${numeros}`;
-
-  const idResolvido = await client.getNumberId(numeroCompleto);
-  if (!idResolvido) throw new Error('Este número não possui WhatsApp ativo');
-
-  return client.sendMessage(idResolvido._serialized, mensagem);
+  if (!socket) throw new Error('WhatsApp ainda não está conectado');
+  const jid = telefoneParaJid(telefone);
+  if (!jid) throw new Error('Telefone do cliente inválido');
+  return socket.sendMessage(jid, { text: mensagem });
 }
 
 function obterStatusWhatsApp() {

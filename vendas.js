@@ -180,7 +180,7 @@ document.getElementById('btnGerarCondicional').addEventListener('click', async (
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      cliente: document.getElementById('clienteVenda').value.trim() || 'Cliente Balcão',
+      cliente: document.getElementById('clienteVenda').value.trim() || 'Consumidor',
       clienteId: clienteIdVenda.value || null,
       tipoPagamento: tipoPagamento.value,
       vencimento: vencimentoVenda.value || null,

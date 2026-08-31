@@ -1,4 +1,0 @@
-{
-  "watch": ["*.js", "*.json", ".env"],
-  "ignore": ["*.log"]
-}

@@ -12,10 +12,9 @@ function dinheiro(valor) {
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function formatarData(valor) {
-  const bruto = String(valor || '');
-  const dataBase = bruto.includes('T') ? bruto.slice(0, 10) : bruto;
-  return new Date(`${dataBase}T12:00:00`).toLocaleDateString('pt-BR');
+function telefoneWhatsApp(telefone) {
+  const numeros = String(telefone || '').replace(/\D/g, '');
+  return numeros.length >= 10 ? `55${numeros}` : '';
 }
 
 async function carregarCobrancas() {
@@ -27,52 +26,77 @@ async function carregarCobrancas() {
   cobrancasVazio.hidden = cobrancas.length > 0;
 
   cobrancas.forEach((cobranca) => {
-    const vencimento = formatarData(cobranca.vencimento);
-    const avisoInfo = cobranca.aviso_enviado_em
-      ? `<span class="aviso-enviado-badge">✓ Avisado em ${new Date(cobranca.aviso_enviado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>`
-      : `<span class="aviso-pendente-badge">Ainda não avisado</span>`;
+    const vencimento = new Date(`${cobranca.vencimento}T12:00:00`).toLocaleDateString('pt-BR');
+    const telefone = telefoneWhatsApp(cobranca.telefone);
+    const mensagem = `Olá, ${cobranca.cliente_nome}. Identificamos uma condicional vencida em ${vencimento}, no valor de ${dinheiro(cobranca.total_atualizado)}. Podemos verificar a regularização? Poderão ser aplicados juros conforme as condições da venda.`;
     const card = document.createElement('article');
     card.className = 'cobranca-card';
     card.innerHTML = `
       <div class="cobranca-dados">
         <strong>${cobranca.cliente_nome}</strong>
-        <span>Venda #${cobranca.id} · Vencimento: ${vencimento} · Atrasada há ${cobranca.dias_atraso} dia(s)</span>
+        <span>Venda #${cobranca.id} · Vencimento: ${vencimento}</span>
         <span>Valor original: ${dinheiro(cobranca.total)}</span>
         <b>Valor atualizado: ${dinheiro(cobranca.total_atualizado)}</b>
-        ${avisoInfo}
       </div>
       <div class="cobranca-acoes">
-        <button type="button" class="btn-whatsapp btn-avisar-lista" data-id="${cobranca.id}">Avisar pelo WhatsApp</button>
-        <button type="button" class="btn-acessar-conta" data-id="${cobranca.id}">Acessar conta ›</button>
+        <label>Juros (%)</label>
+        <input class="percentual-juros" type="number" min="0" max="100" step="0.01" value="${cobranca.juros > 0 ? ((cobranca.juros / cobranca.total) * 100).toFixed(2) : '0'}" data-id="${cobranca.id}">
+        <button type="button" class="btn-aplicar-juros" data-id="${cobranca.id}">Aplicar juros</button>
+        <button type="button" class="btn-pagar-cobranca sem-juros" data-id="${cobranca.id}" data-com-juros="false">Marcar paga sem juros</button>
+        <button type="button" class="btn-pagar-cobranca com-juros" data-id="${cobranca.id}" data-com-juros="true">Marcar paga com juros</button>
+        <button type="button" class="btn-asaas" data-id="${cobranca.id}">Gerar cobrança Asaas</button>
+        ${telefone ? `<a class="btn-whatsapp" target="_blank" href="https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}">Avisar pelo WhatsApp</a>` : '<span class="sem-telefone">Telefone não cadastrado</span>'}
       </div>
     `;
     listaCobrancas.appendChild(card);
   });
 
-  listaCobrancas.querySelectorAll('.btn-acessar-conta').forEach((botao) => {
-    botao.addEventListener('click', () => {
-      window.location.href = `cobranca-detalhe.html?id=${botao.dataset.id}`;
+  listaCobrancas.querySelectorAll('.btn-aplicar-juros').forEach((botao) => {
+    botao.addEventListener('click', async () => {
+      const percentual = listaCobrancas.querySelector(`.percentual-juros[data-id="${botao.dataset.id}"]`).value;
+      const resposta = await fetch(`${API_URL}/cobrancas/${botao.dataset.id}/juros`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ percentual })
+      });
+      const resultado = await resposta.json();
+      if (!resposta.ok) { mensagemCobranca.textContent = resultado.err; return; }
+      mensagemCobranca.textContent = 'Juros aplicados com sucesso.';
+      carregarCobrancas();
     });
   });
 
-  listaCobrancas.querySelectorAll('.btn-avisar-lista').forEach((botao) => {
+  listaCobrancas.querySelectorAll('.btn-pagar-cobranca').forEach((botao) => {
     botao.addEventListener('click', async () => {
-      const textoOriginal = botao.textContent;
+      const percentual = Number.parseFloat(
+        listaCobrancas.querySelector(`.percentual-juros[data-id="${botao.dataset.id}"]`).value
+      ) || 0;
+      const resposta = await fetch(`${API_URL}/cobrancas/${botao.dataset.id}/pagar`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comJuros: botao.dataset.comJuros === 'true', percentual })
+      });
+      const resultado = await resposta.json();
+      if (!resposta.ok) { mensagemCobranca.textContent = resultado.err; return; }
+      mensagemCobranca.textContent = `Cobrança paga: ${dinheiro(resultado.total_pago)}.`;
+      carregarCobrancas();
+    });
+  });
+
+  listaCobrancas.querySelectorAll('.btn-asaas').forEach((botao) => {
+    botao.addEventListener('click', async () => {
       botao.disabled = true;
-      botao.textContent = 'Enviando...';
-      mensagemCobranca.classList.remove('mensagem-erro');
-      try {
-        const resposta = await fetch(`${API_URL}/cobrancas/${botao.dataset.id}/whatsapp`, { method: 'POST' });
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.err || 'Falha ao enviar aviso pelo WhatsApp');
-        mensagemCobranca.textContent = 'Aviso enviado pelo WhatsApp com sucesso.';
-        carregarCobrancas();
-      } catch (err) {
-        mensagemCobranca.textContent = err.message;
-        mensagemCobranca.classList.add('mensagem-erro');
-        botao.disabled = false;
-        botao.textContent = textoOriginal;
+      const resposta = await fetch(`${API_URL}/cobrancas/${botao.dataset.id}/asaas`, { method: 'POST' });
+      const resultado = await resposta.json();
+      botao.disabled = false;
+
+      if (!resposta.ok) {
+        mensagemCobranca.textContent = resultado.err || 'Não foi possível gerar a cobrança.';
+        return;
       }
+
+      const link = resultado.bankSlipUrl || resultado.invoiceUrl;
+      mensagemCobranca.innerHTML = link
+        ? `Cobrança criada. <a href="${link}" target="_blank" rel="noopener">Abrir cobrança</a>`
+        : `Cobrança criada no Asaas: ${resultado.id}`;
     });
   });
 }
