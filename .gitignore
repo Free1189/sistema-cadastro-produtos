@@ -10,10 +10,14 @@ server/node_modules/
 
 # Sessão WhatsApp local
 server/auth_info_baileys/
+.wwebjs_auth/
+server/whatsapp-qr.png
+server/.wwebjs_cache/
 
 # Logs
 *.log
 npm-debug.log*
+.servidor-pid
 
 # Sistema operacional
 .DS_Store

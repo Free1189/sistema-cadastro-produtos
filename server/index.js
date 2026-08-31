@@ -25,7 +25,7 @@ async function enviarAvisosDeVencimento() {
       `SELECT v.id, v.cliente_nome, v.total, v.vencimento, c.telefone
        FROM vendas v
        JOIN clientes c ON c.id = v.cliente_id
-       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id
+       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id AND a.tipo = 'vencimento'
        WHERE v.tipo_pagamento = 'futuro'
          AND v.status = 'finalizada'
          AND v.vencimento = CURRENT_DATE + INTERVAL '1 day'
@@ -33,18 +33,80 @@ async function enviarAvisosDeVencimento() {
     );
 
     for (const venda of resultado.rows) {
-      const mensagem = `Olá, ${venda.cliente_nome}. Lembrete: sua condicional no valor de R$ ${Number(venda.total).toFixed(2).replace('.', ',')} vence amanhã (${new Date(venda.vencimento).toLocaleDateString('pt-BR')}). O atraso poderá gerar juros conforme as condições da venda.`;
+      const mensagem = `*Mensagem automática do sistema Marau Luz e Água*\n\nOlá, ${venda.cliente_nome}. Lembrete: sua condicional no valor de R$ ${Number(venda.total).toFixed(2).replace('.', ',')} vence amanhã (${new Date(venda.vencimento).toLocaleDateString('pt-BR')}). O atraso poderá gerar juros conforme as condições da venda.\n\nEste aviso foi enviado automaticamente pelo sistema. Agradecemos sua compreensão!`;
       try {
         await enviarCobranca(venda.telefone, mensagem);
-        await db.query('INSERT INTO avisos_cobranca (venda_id) VALUES ($1)', [venda.id]);
-        console.log(`Aviso de vencimento enviado para a venda #${venda.id}`);
+        await db.query(
+          `INSERT INTO avisos_cobranca (venda_id, tipo) VALUES ($1, 'vencimento')
+           ON CONFLICT (venda_id, tipo) DO UPDATE SET enviado_em = CURRENT_TIMESTAMP`,
+          [venda.id]
+        );
+        console.log(`Aviso automático de vencimento enviado para a venda #${venda.id}`);
       } catch (err) {
-        console.error(`Não foi possível avisar a venda #${venda.id}:`, err.message);
+        console.error(`Não foi possível avisar (vencimento) a venda #${venda.id}:`, err.message);
       }
     }
   } catch (err) {
-    console.error('Erro no agendador de cobranças:', err);
+    console.error('Erro no agendador de avisos de vencimento:', err);
   }
+}
+
+async function enviarAvisosDeAtraso() {
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_nome, v.vencimento, v.total, v.juros,
+              v.total + v.juros AS total_atualizado,
+              (CURRENT_DATE - v.vencimento)::int AS dias_atraso,
+              c.telefone
+       FROM vendas v
+       JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id AND a.tipo = 'atraso'
+       WHERE v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'
+         AND v.vencimento < CURRENT_DATE
+         AND a.venda_id IS NULL`
+    );
+
+    for (const venda of resultado.rows) {
+      if (!venda.telefone) continue;
+
+      const valorAtualizado = Number(venda.total_atualizado).toFixed(2).replace('.', ',');
+      const dataVencimento = new Date(venda.vencimento).toLocaleDateString('pt-BR');
+      const mensagem = `*Mensagem automática do sistema Marau Luz e Água*\n\nOlá, ${venda.cliente_nome}. Identificamos que sua conta está em atraso há ${venda.dias_atraso} dia(s), com vencimento em ${dataVencimento}. Valor atualizado: R$ ${valorAtualizado}. Por favor, regularize o pagamento o quanto antes.\n\nEste aviso foi enviado automaticamente pelo sistema. Agradecemos sua compreensão!`;
+
+      try {
+        await enviarCobranca(venda.telefone, mensagem);
+        await db.query(
+          `INSERT INTO avisos_cobranca (venda_id, tipo) VALUES ($1, 'atraso')
+           ON CONFLICT (venda_id, tipo) DO UPDATE SET enviado_em = CURRENT_TIMESTAMP`,
+          [venda.id]
+        );
+        console.log(`Aviso automático de atraso enviado para a venda #${venda.id}`);
+      } catch (err) {
+        console.error(`Não foi possível avisar (atraso) a venda #${venda.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Erro no agendador de avisos de atraso:', err);
+  }
+}
+
+function agendarTarefaDiaria(hora, minuto, tarefa) {
+  function proximaExecucao() {
+    const agora = new Date();
+    const proxima = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), hora, minuto, 0, 0);
+    if (proxima <= agora) {
+      proxima.setDate(proxima.getDate() + 1);
+    }
+    return proxima;
+  }
+
+  const espera = proximaExecucao().getTime() - Date.now();
+  setTimeout(() => {
+    tarefa();
+    setInterval(tarefa, 24 * 60 * 60 * 1000);
+  }, espera);
 }
 
 async function sincronizarPagamentosAsaas(asaasPaymentId = null) {
@@ -83,7 +145,7 @@ async function sincronizarPagamentosAsaas(asaasPaymentId = null) {
           `SELECT id, total, juros
          FROM vendas
          WHERE id = ANY($1::int[])
-         ORDER BY GREATEST(total + juros - COALESCE(valor_pago, 0), 0) ASC, id ASC`,
+         ORDER BY criado_em ASC, id ASC`,
           [cobranca.venda_ids]
         );
         for (const venda of vendasGrupo.rows) {
@@ -122,6 +184,11 @@ app.post('/login', (req, res) => {
       usuario: process.env.APP_USER_ADMIN,
       senha: process.env.APP_PASSWORD_ADMIN,
       perfil: 'admin'
+    },
+    {
+      usuario: process.env.APP_USER_RELATORIOS,
+      senha: process.env.APP_PASSWORD_RELATORIOS,
+      perfil: 'relatorios'
     }
   ];
   const usuarioEncontrado = usuarios.find(
@@ -411,7 +478,7 @@ app.post('/vendas/condicional', async (req, res) => {
         RETURNING id, cliente_nome, total, data_venda_dia, numero_venda_dia`,
       [
         clienteId || null,
-        clienteCadastrado?.nome || cliente || 'Consumidor',
+        clienteCadastrado?.nome || cliente || 'Cliente Balcão',
         tipoPagamento,
         vencimento || null,
         percentualDesconto,
@@ -453,7 +520,7 @@ app.post('/vendas/condicional', async (req, res) => {
   const alturaVia = 550;
   const margemEsquerda = 30;
   const margemDireita = 430;
-  const clienteNome = clienteCadastrado?.nome || cliente || 'Consumidor';
+  const clienteNome = clienteCadastrado?.nome || cliente || 'Cliente Balcão';
   const clienteEndereco = `${clienteCadastrado?.rua || 'Nao informado'}, ${clienteCadastrado?.numero || 's/n'} - ${clienteCadastrado?.bairro || 'Nao informado'} - ${clienteCadastrado?.cidade || 'Nao informado'}`;
 
   function texto(documentoPdf, textoInformacao, x, y, tamanho = 7, opcoes = {}) {
@@ -657,6 +724,31 @@ app.get('/vendas/pendentes', async (req, res) => {
   }
 });
 
+app.get('/vendas/pendentes/:id', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da venda inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT id, cliente_nome, subtotal, desconto, total, itens, criado_em, data_venda_dia, numero_venda_dia
+       FROM vendas WHERE id = $1 AND status = 'aguardando_pagamento' AND tipo_pagamento = 'avista'`,
+      [id]
+    );
+
+    if (resultado.rowCount === 0) {
+      return res.status(404).json({ err: 'Venda pendente não encontrada' });
+    }
+
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar venda pendente' });
+  }
+});
+
 app.put('/vendas/:id/finalizar', async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   const { metodoPagamento, documento } = req.body;
@@ -821,9 +913,12 @@ app.get('/cobrancas/atrasadas', async (req, res) => {
   try {
     const resultado = await db.query(
       `SELECT v.id, v.cliente_id, v.cliente_nome, c.telefone, v.vencimento,
-              v.total, v.juros, v.total + v.juros AS total_atualizado
+              v.total, v.juros, v.total + v.juros AS total_atualizado,
+              (CURRENT_DATE - v.vencimento)::int AS dias_atraso,
+              a.enviado_em AS aviso_enviado_em
        FROM vendas v
        LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id AND a.tipo = 'atraso'
        WHERE v.tipo_pagamento = 'futuro'
          AND v.status = 'finalizada'
          AND v.status_pagamento = 'pendente'
@@ -841,6 +936,36 @@ app.get('/cobrancas/atrasadas', async (req, res) => {
 app.post('/cobrancas/sincronizar', async (req, res) => {
   await sincronizarPagamentosAsaas();
   res.json({ sincronizado: true });
+});
+
+app.get('/cobrancas/:id/detalhe', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da cobrança inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_id, v.cliente_nome, c.telefone, v.vencimento,
+              v.total, v.juros, v.total + v.juros AS total_atualizado,
+              (CURRENT_DATE - v.vencimento)::int AS dias_atraso,
+              a.enviado_em AS aviso_enviado_em
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       LEFT JOIN avisos_cobranca a ON a.venda_id = v.id AND a.tipo = 'atraso'
+       WHERE v.id = $1
+         AND v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'`,
+      [id]
+    );
+    if (resultado.rowCount === 0) return res.status(404).json({ err: 'Cobrança não encontrada' });
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar cobrança' });
+  }
 });
 
 app.put('/cobrancas/:id/juros', async (req, res) => {
@@ -867,6 +992,53 @@ app.put('/cobrancas/:id/juros', async (req, res) => {
   }
 });
 
+app.post('/cobrancas/:id/whatsapp', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da cobrança inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_nome, v.vencimento, v.total, v.juros,
+              v.total + v.juros AS total_atualizado,
+              (CURRENT_DATE - v.vencimento)::int AS dias_atraso,
+              c.telefone
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.id = $1
+         AND v.tipo_pagamento = 'futuro'
+         AND v.status = 'finalizada'
+         AND v.status_pagamento = 'pendente'`,
+      [id]
+    );
+
+    if (resultado.rowCount === 0) return res.status(404).json({ err: 'Cobrança não encontrada' });
+
+    const venda = resultado.rows[0];
+    if (!venda.telefone) return res.status(400).json({ err: 'Cliente sem telefone cadastrado' });
+
+    const valorAtualizado = Number(venda.total_atualizado).toFixed(2).replace('.', ',');
+    const dataVencimento = new Date(venda.vencimento).toLocaleDateString('pt-BR');
+    const mensagem = `Olá, ${venda.cliente_nome}. Sua conta (venda #${venda.id}) está em atraso há ${venda.dias_atraso} dia(s), com vencimento em ${dataVencimento}. Valor atualizado: R$ ${valorAtualizado}. Por favor, regularize o pagamento o quanto antes.`;
+
+    await enviarCobranca(venda.telefone, mensagem);
+
+    const aviso = await db.query(
+      `INSERT INTO avisos_cobranca (venda_id, tipo) VALUES ($1, 'atraso')
+       ON CONFLICT (venda_id, tipo) DO UPDATE SET enviado_em = CURRENT_TIMESTAMP
+       RETURNING enviado_em`,
+      [id]
+    );
+
+    res.json({ enviado_em: aviso.rows[0].enviado_em });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ err: err.message || 'Erro ao enviar aviso pelo WhatsApp' });
+  }
+});
+
 app.post('/cobrancas/:id/asaas', async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
 
@@ -890,10 +1062,17 @@ app.post('/cobrancas/:id/asaas', async (req, res) => {
     }
 
     const venda = resultado.rows[0];
+    const valorCobranca = Number(venda.total) + Number(venda.juros);
     const cobranca = await criarCobranca(
       { id: venda.cliente_id, nome: venda.nome, cpf: venda.cpf, telefone: venda.telefone },
-      Number(venda.total) + Number(venda.juros),
+      valorCobranca,
       `Cobrança da venda #${venda.id}`
+    );
+
+    await db.query(
+      `INSERT INTO cobrancas_asaas (grupo_id, asaas_payment_id, cliente_id, venda_ids, valor_cobrado)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [`venda-${venda.id}-${Date.now()}`, cobranca.id, venda.cliente_id, [venda.id], valorCobranca]
     );
 
     res.json({
@@ -1047,6 +1226,8 @@ app.put('/cobrancas/:id/pagar', async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   const comJuros = req.body.comJuros === true;
   const percentual = Number.parseFloat(req.body.percentual) || 0;
+  const metodosValidos = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito'];
+  const metodoPagamento = metodosValidos.includes(req.body.metodoPagamento) ? req.body.metodoPagamento : 'dinheiro';
 
   if (Number.isNaN(id) || percentual < 0 || percentual > 100) {
     return res.status(400).json({ err: 'Dados de pagamento inválidos' });
@@ -1056,10 +1237,11 @@ app.put('/cobrancas/:id/pagar', async (req, res) => {
     const resultado = await db.query(
       `UPDATE vendas
        SET juros = CASE WHEN $1 THEN total * $2 / 100 ELSE 0 END,
-           status_pagamento = 'pago', pago_em = CURRENT_TIMESTAMP
+           status_pagamento = 'pago', pago_em = CURRENT_TIMESTAMP,
+           tipo_pagamento = $4
        WHERE id = $3 AND status_pagamento = 'pendente'
        RETURNING id, total, juros, total + juros AS total_pago, pago_em`,
-      [comJuros, percentual, id]
+      [comJuros, percentual, id, metodoPagamento]
     );
     if (resultado.rowCount === 0) {
       return res.status(404).json({ err: 'Cobrança não encontrada ou já paga' });
@@ -1239,6 +1421,67 @@ app.get('/whatsapp/status', (req, res) => {
   res.json(obterStatusWhatsApp());
 });
 
+app.get('/whatsapp/qr', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(require('path').join(__dirname, 'whatsapp-qr.png'), (err) => {
+    if (err) res.status(404).send('QR Code ainda não gerado. Aguarde o servidor solicitar um novo QR.');
+  });
+});
+
+app.get('/whatsapp/conectar', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.send(`<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Conectar WhatsApp</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #eef2f5; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+    h1 { color: #1a1c23; }
+    #status { font-weight: bold; margin-bottom: 16px; padding: 10px 16px; border-radius: 6px; }
+    #status.aguardando { background: #fff4e0; color: #b26a00; }
+    #status.conectado { background: #e6f6ec; color: #168c4b; }
+    #qr { width: 320px; height: 320px; border: 1px solid #dbe3ea; border-radius: 8px; background: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Conectar WhatsApp</h1>
+  <p id="status" class="aguardando">Aguardando QR Code...</p>
+  <img id="qr" src="/whatsapp/qr?t=0" alt="QR Code do WhatsApp">
+  <p>Escaneie com: WhatsApp &gt; Aparelhos conectados &gt; Conectar um aparelho.<br>A imagem se atualiza sozinha, não precisa dar F5.</p>
+  <script>
+    const img = document.getElementById('qr');
+    const status = document.getElementById('status');
+
+    function atualizarQr() {
+      img.src = '/whatsapp/qr?t=' + Date.now();
+    }
+
+    async function atualizarStatus() {
+      try {
+        const resposta = await fetch('/whatsapp/status');
+        const dados = await resposta.json();
+        if (dados.conectado) {
+          status.textContent = 'Conectado com sucesso!';
+          status.className = 'conectado';
+          img.style.display = 'none';
+        } else {
+          status.textContent = 'Aguardando leitura do QR Code (estado: ' + dados.estado + ')';
+          status.className = 'aguardando';
+        }
+      } catch (err) {
+        status.textContent = 'Não foi possível consultar o status.';
+      }
+    }
+
+    setInterval(atualizarQr, 4000);
+    setInterval(atualizarStatus, 3000);
+    atualizarStatus();
+  </script>
+</body>
+</html>`);
+});
+
 
 app.get('/produtos', async (req, res) => {
   const pagina = Math.max(Number.parseInt(req.query.pagina, 10) || 1, 1);
@@ -1316,6 +1559,15 @@ app.post('/produtos', async (req, res) => {
         );
       }
 
+      const valorCustoEntrada = Number(precoCusto) * estoqueFormatado;
+      if (estoqueFormatado > 0 && Number.isFinite(valorCustoEntrada) && valorCustoEntrada > 0) {
+        await cliente.query(
+          `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
+           VALUES ('produto', $1, $2, CURRENT_DATE)`,
+          [`Entrada de estoque: ${nome} (${estoqueFormatado} un.)`, valorCustoEntrada]
+        );
+      }
+
       await cliente.query('COMMIT');
       res.status(produtoExistente.rowCount > 0 ? 200 : 201).json(resultado.rows[0]);
     } catch (err) {
@@ -1340,20 +1592,48 @@ app.put('/produtos/:id', async (req, res) => {
   }
 
   try {
-    const resultado = await db.query(
-      `UPDATE produtos
-       SET nome = $1, categoria = $2, "precoCusto" = $3,
-           "precoVenda" = $4, estoque = $5, ncm = $6
-       WHERE id = $7
-       RETURNING *`,
-      [nome, categoria, precoCusto, precoVenda, estoqueFormatado, ncm, id]
-    );
+    const cliente = await db.connect();
 
-    if (resultado.rowCount === 0) {
-      return res.status(404).json({ err: 'Produto não encontrado' });
+    try {
+      await cliente.query('BEGIN');
+
+      const produtoAnterior = await cliente.query(
+        'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE',
+        [id]
+      );
+
+      if (produtoAnterior.rowCount === 0) {
+        await cliente.query('ROLLBACK');
+        return res.status(404).json({ err: 'Produto não encontrado' });
+      }
+
+      const resultado = await cliente.query(
+        `UPDATE produtos
+         SET nome = $1, categoria = $2, "precoCusto" = $3,
+             "precoVenda" = $4, estoque = $5, ncm = $6
+         WHERE id = $7
+         RETURNING *`,
+        [nome, categoria, precoCusto, precoVenda, estoqueFormatado, ncm, id]
+      );
+
+      const estoqueAdicionado = estoqueFormatado - produtoAnterior.rows[0].estoque;
+      const valorCustoEntrada = Number(precoCusto) * estoqueAdicionado;
+      if (estoqueAdicionado > 0 && Number.isFinite(valorCustoEntrada) && valorCustoEntrada > 0) {
+        await cliente.query(
+          `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
+           VALUES ('produto', $1, $2, CURRENT_DATE)`,
+          [`Entrada de estoque: ${nome} (${estoqueAdicionado} un.)`, valorCustoEntrada]
+        );
+      }
+
+      await cliente.query('COMMIT');
+      res.json(resultado.rows[0]);
+    } catch (err) {
+      await cliente.query('ROLLBACK');
+      throw err;
+    } finally {
+      cliente.release();
     }
-
-    res.json(resultado.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ err: 'Erro ao editar produto' });
@@ -1427,6 +1707,15 @@ app.post('/notas/importar', upload.single('xml'), async (req, res) => {
           );
           criados++;
         }
+
+        const valorCustoEntrada = precoCusto * quantidade;
+        if (valorCustoEntrada > 0) {
+          await cliente.query(
+            `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
+             VALUES ('produto', $1, $2, CURRENT_DATE)`,
+            [`Compra via NFC-e (${codigoNfce}): ${nome} (${quantidade} un.)`, valorCustoEntrada]
+          );
+        }
       }
 
       await cliente.query('COMMIT');
@@ -1470,6 +1759,164 @@ app.delete('/produtos/:id', async (req, res) => {
   }
 });
 
+const CATEGORIAS_DESPESA = ['imposto', 'salario', 'luz', 'agua', 'produto', 'outro'];
+const ROTULOS_DESPESA = {
+  imposto: 'Impostos',
+  salario: 'Salário',
+  luz: 'Luz',
+  agua: 'Água',
+  produto: 'Compra de produtos',
+  outro: 'Outros gastos'
+};
+
+function periodoValido(inicio, fim) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim);
+}
+
+app.post('/despesas', async (req, res) => {
+  const categoria = String(req.body.categoria || '');
+  const descricao = String(req.body.descricao || '').trim().slice(0, 200);
+  const valor = Number.parseFloat(req.body.valor);
+  const data = String(req.body.data || '');
+
+  if (!CATEGORIAS_DESPESA.includes(categoria) || !Number.isFinite(valor) || valor <= 0 || !periodoValido(data, data)) {
+    return res.status(400).json({ err: 'Informe categoria, valor e data válidos' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, categoria, descricao, valor, data_despesa`,
+      [categoria, descricao || null, valor, data]
+    );
+    res.status(201).json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao cadastrar despesa' });
+  }
+});
+
+app.get('/despesas', async (req, res) => {
+  const inicio = String(req.query.inicio || '');
+  const fim = String(req.query.fim || '');
+
+  if (!periodoValido(inicio, fim)) {
+    return res.status(400).json({ err: 'Informe o período (início e fim) para listar as despesas' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `SELECT id, categoria, descricao, valor, data_despesa
+       FROM despesas
+       WHERE data_despesa BETWEEN $1 AND $2
+       ORDER BY data_despesa DESC, id DESC`,
+      [inicio, fim]
+    );
+    res.json(resultado.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao buscar despesas' });
+  }
+});
+
+app.delete('/despesas/:id', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da despesa inválido' });
+  }
+
+  try {
+    const resultado = await db.query('DELETE FROM despesas WHERE id = $1', [id]);
+    if (resultado.rowCount === 0) return res.status(404).json({ err: 'Despesa não encontrada' });
+    res.status(204).send();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao excluir despesa' });
+  }
+});
+
+app.get('/relatorio/pdf', async (req, res) => {
+  const inicio = String(req.query.inicio || '');
+  const fim = String(req.query.fim || '');
+
+  if (!periodoValido(inicio, fim)) {
+    return res.status(400).json({ err: 'Informe o período (início e fim) para gerar o relatório' });
+  }
+
+  try {
+    const vendasResultado = await db.query(
+      `SELECT COUNT(*)::int AS quantidade,
+              COALESCE(SUM(total), 0)::numeric AS total_vendido,
+              COALESCE(SUM(valor_pago), 0)::numeric AS total_pago
+       FROM vendas
+       WHERE criado_em::date BETWEEN $1 AND $2
+         AND status = 'finalizada'`,
+      [inicio, fim]
+    );
+
+    const despesasResultado = await db.query(
+      `SELECT categoria, COALESCE(SUM(valor), 0)::numeric AS total
+       FROM despesas
+       WHERE data_despesa BETWEEN $1 AND $2
+       GROUP BY categoria`,
+      [inicio, fim]
+    );
+
+    const { quantidade, total_vendido: totalVendido, total_pago: totalPago } = vendasResultado.rows[0];
+    const totaisPorCategoria = Object.fromEntries(CATEGORIAS_DESPESA.map((categoria) => [categoria, 0]));
+    for (const linha of despesasResultado.rows) {
+      totaisPorCategoria[linha.categoria] = Number(linha.total);
+    }
+    const totalGastos = Object.values(totaisPorCategoria).reduce((soma, valor) => soma + valor, 0);
+
+    const formatarValor = (valor) => `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
+    const formatarData = (data) => new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR');
+
+    const documento = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="relatorio-${inicio}-a-${fim}.pdf"`);
+    documento.pipe(res);
+
+    documento.font('Helvetica-Bold').fontSize(18).text('Marau Luz e Água', { align: 'center' });
+    documento.font('Helvetica').fontSize(11).text('Relatório financeiro', { align: 'center' });
+    documento.fontSize(10).text(`Período: ${formatarData(inicio)} a ${formatarData(fim)}`, { align: 'center' });
+    documento.moveDown(1.5);
+
+    documento.font('Helvetica-Bold').fontSize(13).text('Vendas');
+    documento.moveDown(0.3);
+    documento.font('Helvetica').fontSize(11);
+    documento.text(`Quantidade de vendas: ${quantidade}`);
+    documento.text(`Total vendido: ${formatarValor(totalVendido)}`);
+    documento.text(`Total pago: ${formatarValor(totalPago)}`);
+    documento.moveDown(1);
+
+    documento.font('Helvetica-Bold').fontSize(13).text('Gastos');
+    documento.moveDown(0.3);
+    documento.font('Helvetica').fontSize(11);
+    for (const categoria of CATEGORIAS_DESPESA) {
+      documento.text(`${ROTULOS_DESPESA[categoria]}: ${formatarValor(totaisPorCategoria[categoria])}`);
+    }
+    documento.moveDown(0.3);
+    documento.font('Helvetica-Bold').text(`Total de gastos: ${formatarValor(totalGastos)}`);
+    documento.moveDown(1);
+
+    const saldo = Number(totalPago) - totalGastos;
+    documento.font('Helvetica-Bold').fontSize(13).text('Saldo do período');
+    documento.moveDown(0.3);
+    documento.font('Helvetica').fontSize(11).text(`Total pago - total de gastos: ${formatarValor(saldo)}`);
+
+    documento.moveDown(2);
+    documento.font('Helvetica').fontSize(8).text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+
+    documento.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao gerar relatório' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('servidor esta rodando na PORT 3000'); // define em qual prota do servidor vai rodar, e deixa o console ouvindo para saber se deu tudo certo 
@@ -1478,5 +1925,7 @@ app.listen(PORT, () => {
   sincronizarPagamentosAsaas();
   setInterval(enviarAvisosDeVencimento, 60 * 60 * 1000);
   setInterval(sincronizarPagamentosAsaas, 5 * 60 * 1000);
+  setTimeout(enviarAvisosDeAtraso, 30000);
+  agendarTarefaDiaria(0, 0, enviarAvisosDeAtraso);
 });
 

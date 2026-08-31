@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Relatório geral - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card relatorio-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Relatório geral</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="relatorio-content">
+      <p id="mensagemRelatorio" class="mensagem-venda" role="status"></p>
+
+      <article class="detalhe-bloco">
+        <h3>Gerar relatório em PDF</h3>
+        <p class="detalhe-bloco-descricao">Escolha o período: quantidade de vendas, valor pago e o detalhamento dos gastos (impostos, salário, luz e água) do intervalo.</p>
+        <div class="relatorio-periodo-form">
+          <div>
+            <label for="inputPeriodoInicio">Início</label>
+            <input type="date" id="inputPeriodoInicio">
+          </div>
+          <div>
+            <label for="inputPeriodoFim">Fim</label>
+            <input type="date" id="inputPeriodoFim">
+          </div>
+          <button type="button" id="btnGerarPdf" class="btn-aplicar-juros">Gerar PDF</button>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script src="relatorio.js"></script>
+</body>
+
+</html>
