@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="projetoBasico.css">
   <title>Hub - Marau Luz e Água</title>
+  <script>
+    if (sessionStorage.getItem('perfil') === 'relatorios') {
+      document.documentElement.classList.add('perfil-relatorios');
+    }
+  </script>
 </head>
 
 <body>
@@ -25,45 +30,66 @@
       </div>
 
       <nav class="hub-grid" aria-label="Módulos do sistema">
-        <a class="hub-card hub-card-destaque" href="vendas.html">
+        <a class="hub-card hub-card-destaque hub-card-financeiro" href="contas-a-pagar.html" id="hubCardContasPagar">
+          <span class="hub-card-index">01</span>
+          <span class="hub-card-title">Contas a pagar</span>
+          <span class="hub-card-status">Despesas e gastos</span>
+        </a>
+        <a class="hub-card hub-card-destaque hub-card-financeiro" href="contas-a-receber.html" id="hubCardContasReceber">
+          <span class="hub-card-index">02</span>
+          <span class="hub-card-title">Contas a receber</span>
+          <span class="hub-card-status">Cobranças e parcelas</span>
+        </a>
+        <a class="hub-card hub-card-vip hub-card-financeiro" href="relatorio.html" id="hubCardRelatorio">
+          <span class="hub-card-index">03</span>
+          <span class="hub-card-title">Relatório geral</span>
+          <span class="hub-card-status">Acesso exclusivo</span>
+        </a>
+        <a class="hub-card hub-card-secundario hub-card-financeiro" href="operacoes.html" id="hubCardOperacoes">
+          <span class="hub-card-index">04</span>
+          <span class="hub-card-title">Operações</span>
+          <span class="hub-card-status">Demais módulos do sistema</span>
+        </a>
+
+        <a class="hub-card hub-card-destaque hub-card-operacional" href="vendas.html">
           <span class="hub-card-index">01</span>
           <span class="hub-card-title">Vendas</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-status">Registrar venda</span>
         </a>
-        <a class="hub-card" href="caixa.html" data-perfil="admin">
+        <a class="hub-card hub-card-operacional" href="caixa.html" data-perfil="admin">
           <span class="hub-card-index">02</span>
           <span class="hub-card-title">Caixa</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-status">Receber pagamentos</span>
         </a>
-        <a class="hub-card" href="clientes.html">
+        <a class="hub-card hub-card-operacional" href="clientes.html">
           <span class="hub-card-index">03</span>
-          <span class="hub-card-title">Cadastro de clientes</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-title">Clientes</span>
+          <span class="hub-card-status">Cadastro e busca</span>
         </a>
-        <a class="hub-card hub-card-destaque" href="devolucoes.html">
+        <a class="hub-card hub-card-operacional" href="devolucoes.html">
           <span class="hub-card-index">04</span>
           <span class="hub-card-title">Devoluções</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-status">Gerenciar devoluções</span>
         </a>
-        <a class="hub-card" href="cobrancas.html" data-perfil="admin">
+        <a class="hub-card hub-card-operacional" href="cobrancas.html" data-perfil="admin">
           <span class="hub-card-index">05</span>
-          <span class="hub-card-title">Cobrança de clientes</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-title">Cobranças</span>
+          <span class="hub-card-status">Avisos e gestão</span>
         </a>
-        <a class="hub-card" href="cobrancas-prazo.html" data-perfil="admin">
+        <a class="hub-card hub-card-operacional" href="cobrancas-prazo.html" data-perfil="admin">
           <span class="hub-card-index">06</span>
           <span class="hub-card-title">Pagamentos a prazo</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-status">Controle de parcelas</span>
         </a>
-        <a class="hub-card" href="vendas-total.html" data-perfil="admin">
+        <a class="hub-card hub-card-operacional" href="vendas-total.html" data-perfil="admin">
           <span class="hub-card-index">07</span>
-          <span class="hub-card-title">Total de vendas</span>
-          <span class="hub-card-status">Abrir módulo</span>
+          <span class="hub-card-title">Resumo de vendas</span>
+          <span class="hub-card-status">Relatórios</span>
         </a>
-        <a class="hub-card hub-card-destaque" href="index.html" data-perfil="admin">
+        <a class="hub-card hub-card-destaque hub-card-operacional" href="index.html" data-perfil="admin">
           <span class="hub-card-index">08</span>
-          <span class="hub-card-title">Cadastro de produtos</span>
-          <span class="hub-card-status">Acesso restrito</span>
+          <span class="hub-card-title">Produtos</span>
+          <span class="hub-card-status">Cadastro e estoque</span>
         </a>
       </nav>
       <p id="hubMensagem" class="hub-mensagem" role="status"></p>

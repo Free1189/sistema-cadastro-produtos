@@ -133,12 +133,21 @@ criarTabelaVendas.then(() => db.query(`
   )
 `)).catch((err) => console.error('erro ao criar tabela devolucoes', err));
 
-criarTabelaVendas.then(() => db.query(`
+const criarTabelaAvisos = criarTabelaVendas.then(() => db.query(`
   CREATE TABLE IF NOT EXISTS avisos_cobranca (
     venda_id INTEGER PRIMARY KEY REFERENCES vendas(id) ON DELETE CASCADE,
     enviado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `)).catch((err) => console.error('erro ao criar tabela avisos_cobranca', err));
+
+criarTabelaAvisos.then(() => db.query(`
+  ALTER TABLE avisos_cobranca
+    ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'vencimento'
+`)).then(() => db.query(`
+  ALTER TABLE avisos_cobranca DROP CONSTRAINT IF EXISTS avisos_cobranca_pkey
+`)).then(() => db.query(`
+  ALTER TABLE avisos_cobranca ADD PRIMARY KEY (venda_id, tipo)
+`)).catch((err) => console.error('erro ao preparar tabela avisos_cobranca', err));
 
 criarTabelaVendas.then(() => db.query(`
   CREATE TABLE IF NOT EXISTS cobrancas_asaas (
@@ -159,5 +168,16 @@ criarTabelaVendas.then(() => db.query(`
 `)).catch((err) => console.error('erro ao preparar tabela cobrancas_asaas', err));
 
 
-module.exports = db; // exporta a conexão pronta para ser usado no js do front 
+criarTabelaVendas.then(() => db.query(`
+  CREATE TABLE IF NOT EXISTS despesas (
+    id SERIAL PRIMARY KEY,
+    categoria VARCHAR(30) NOT NULL,
+    descricao VARCHAR(200),
+    valor NUMERIC(12, 2) NOT NULL,
+    data_despesa DATE NOT NULL,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`)).catch((err) => console.error('erro ao criar tabela despesas', err));
+
+module.exports = db; // exporta a conexão pronta para ser usado no js do front
 

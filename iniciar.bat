@@ -1,4 +1,4 @@
 @echo off
-cd /d "%~dp0"
-node .\server\index.js
+cd /d "%~dp0\server"
+call npx nodemon index.js
 pause

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Detalhe da venda - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card caixa-detalhe-container">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Detalhe da venda</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section class="cobranca-detalhe-content">
+      <p id="mensagemDetalhe" class="mensagem-venda" role="status"></p>
+
+      <div id="detalheCorpo" hidden>
+        <div class="detalhe-cliente-card">
+          <div>
+            <p class="hub-kicker">Venda no caixa</p>
+            <h2 id="detalheClienteNome">-</h2>
+            <span id="detalheVendaInfo" class="sem-telefone">-</span>
+          </div>
+        </div>
+
+        <div class="detalhe-grid">
+          <article class="detalhe-bloco">
+            <h3>Itens da venda</h3>
+            <ul id="detalheItensLista" class="caixa-itens-lista"></ul>
+          </article>
+
+          <article class="detalhe-bloco">
+            <h3>Resumo</h3>
+            <dl class="detalhe-resumo">
+              <div><dt>Subtotal</dt><dd id="detalheSubtotal">-</dd></div>
+              <div><dt>Desconto</dt><dd id="detalheDesconto">-</dd></div>
+              <div><dt>Total</dt><dd id="detalheTotal" class="valor-destaque">-</dd></div>
+            </dl>
+          </article>
+
+          <article class="detalhe-bloco">
+            <h3>Documento (opcional)</h3>
+            <p class="detalhe-bloco-descricao">CPF ou CNPJ do cliente para o comprovante, se desejar.</p>
+            <div class="documento-form">
+              <label for="inputDocumento">CPF / CNPJ</label>
+              <input type="text" id="inputDocumento" class="input-documento" placeholder="Ex: 000.000.000-00">
+            </div>
+          </article>
+
+          <article class="detalhe-bloco">
+            <h3>Forma de pagamento</h3>
+            <div class="forma-pagamento-group" id="grupoFormaPagamento">
+              <label class="forma-pagamento-option selected">
+                <input type="radio" name="metodoPagamento" value="dinheiro" checked>
+                <span>💵 Dinheiro</span>
+              </label>
+              <label class="forma-pagamento-option">
+                <input type="radio" name="metodoPagamento" value="pix">
+                <span>📱 PIX</span>
+              </label>
+              <label class="forma-pagamento-option">
+                <input type="radio" name="metodoPagamento" value="cartao_debito">
+                <span>💳 Débito</span>
+              </label>
+              <label class="forma-pagamento-option">
+                <input type="radio" name="metodoPagamento" value="cartao_credito">
+                <span>💳 Crédito</span>
+              </label>
+            </div>
+            <div class="detalhe-boleto-form caixa-detalhe-acoes">
+              <button type="button" id="btnFinalizarVenda" class="btn-pagar-cobranca com-juros">Finalizar venda</button>
+              <button type="button" id="btnCancelarVenda" class="btn-cancelar-pendente">Cancelar venda</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="caixa-detalhe.js"></script>
+</body>
+
+</html>

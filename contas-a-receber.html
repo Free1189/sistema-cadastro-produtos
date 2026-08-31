@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="projetoBasico.css">
+  <title>Contas a receber - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="container-card">
+    <header>
+      <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      <p class="subtitulo">Contas a receber</p>
+      <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+    </header>
+
+    <section style="padding-top: 24px;">
+      <p class="hub-kicker">Cobranças e parcelas</p>
+      <h2 style="margin-bottom: 20px;">Escolha o que deseja visualizar</h2>
+
+      <nav class="hub-grid" aria-label="Contas a receber" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+        <a class="hub-card hub-card-destaque" href="cobrancas.html">
+          <span class="hub-card-index">01</span>
+          <span class="hub-card-title">Clientes em atraso</span>
+          <span class="hub-card-status">Avisos e cobrança</span>
+        </a>
+        <a class="hub-card hub-card-destaque" href="cobrancas-prazo.html">
+          <span class="hub-card-index">02</span>
+          <span class="hub-card-title">Pagamentos a prazo</span>
+          <span class="hub-card-status">Todas as parcelas pendentes</span>
+        </a>
+      </nav>
+    </section>
+  </main>
+  <script src="contas-a-receber.js"></script>
+</body>
+
+</html>
