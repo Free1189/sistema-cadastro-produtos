@@ -1021,7 +1021,7 @@ app.post('/cobrancas/:id/whatsapp', async (req, res) => {
 
     const valorAtualizado = Number(venda.total_atualizado).toFixed(2).replace('.', ',');
     const dataVencimento = new Date(venda.vencimento).toLocaleDateString('pt-BR');
-    const mensagem = `Olá, ${venda.cliente_nome}. Sua conta (venda #${venda.id}) está em atraso há ${venda.dias_atraso} dia(s), com vencimento em ${dataVencimento}. Valor atualizado: R$ ${valorAtualizado}. Por favor, regularize o pagamento o quanto antes.`;
+    const mensagem = `*Marau Luz e Água*\n\nOlá, ${venda.cliente_nome}. Sua conta está em atraso há ${venda.dias_atraso} dia(s), com vencimento em ${dataVencimento}. Valor atualizado: R$ ${valorAtualizado}. Por favor, regularize o pagamento o quanto antes.\n\nAgradecemos sua compreensão!`;
 
     await enviarCobranca(venda.telefone, mensagem);
 
