@@ -1880,41 +1880,113 @@ app.get('/relatorio/pdf', async (req, res) => {
     const formatarValor = (valor) => `R$ ${Number(valor).toFixed(2).replace('.', ',')}`;
     const formatarData = (data) => new Date(`${data}T12:00:00`).toLocaleDateString('pt-BR');
 
+    const saldo = Number(totalPago) - totalGastos;
+
     const documento = new PDFDocument({ size: 'A4', margin: 50 });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="relatorio-${inicio}-a-${fim}.pdf"`);
     documento.pipe(res);
 
-    documento.font('Helvetica-Bold').fontSize(18).text('Marau Luz e Água', { align: 'center' });
-    documento.font('Helvetica').fontSize(11).text('Relatório financeiro', { align: 'center' });
-    documento.fontSize(10).text(`Período: ${formatarData(inicio)} a ${formatarData(fim)}`, { align: 'center' });
-    documento.moveDown(1.5);
+    const CORES = {
+      fundoEscuro: '#1a1c23',
+      azul: '#0288d1',
+      amarela: '#ffc107',
+      laranja: '#b26a00',
+      verde: '#168c4b',
+      vermelho: '#b42318',
+      cinza: '#68737d',
+      cinzaClaro: '#dbe3ea',
+      fundoClaro: '#f8fafc',
+      branco: '#ffffff'
+    };
 
-    documento.font('Helvetica-Bold').fontSize(13).text('Vendas');
-    documento.moveDown(0.3);
-    documento.font('Helvetica').fontSize(11);
-    documento.text(`Quantidade de vendas: ${quantidade}`);
-    documento.text(`Total vendido: ${formatarValor(totalVendido)}`);
-    documento.text(`Total pago: ${formatarValor(totalPago)}`);
-    documento.moveDown(1);
+    const margemEsquerda = documento.page.margins.left;
+    const larguraConteudo = documento.page.width - documento.page.margins.left - documento.page.margins.right;
+    const alturaCabecalho = 96;
 
-    documento.font('Helvetica-Bold').fontSize(13).text('Gastos');
-    documento.moveDown(0.3);
-    documento.font('Helvetica').fontSize(11);
-    for (const categoria of CATEGORIAS_DESPESA) {
-      documento.text(`${ROTULOS_DESPESA[categoria]}: ${formatarValor(totaisPorCategoria[categoria])}`);
+    documento.rect(0, 0, documento.page.width, alturaCabecalho).fill(CORES.fundoEscuro);
+    documento.fillColor(CORES.branco).font('Helvetica-Bold').fontSize(20)
+      .text('Marau Luz e Água', margemEsquerda, 26, { width: larguraConteudo, align: 'center' });
+    documento.fillColor(CORES.amarela).font('Helvetica-Bold').fontSize(11)
+      .text('Relatório financeiro', { width: larguraConteudo, align: 'center' });
+    documento.fillColor('#c7cdd4').font('Helvetica').fontSize(9)
+      .text(`Período: ${formatarData(inicio)} a ${formatarData(fim)}`, { width: larguraConteudo, align: 'center' });
+
+    documento.y = alturaCabecalho + 28;
+    documento.fillColor(CORES.fundoEscuro);
+
+    function desenharSecao(titulo, corBarra, linhas) {
+      const paddingBox = 16;
+      const alturaLinha = 22;
+      const alturaTitulo = 26;
+      const alturaBox = alturaTitulo + linhas.length * alturaLinha + paddingBox * 1.5;
+
+      if (documento.y + alturaBox > documento.page.height - documento.page.margins.bottom) {
+        documento.addPage();
+      }
+
+      const y0 = documento.y;
+
+      documento.roundedRect(margemEsquerda, y0, larguraConteudo, alturaBox, 8)
+        .fillAndStroke(CORES.fundoClaro, CORES.cinzaClaro);
+      documento.rect(margemEsquerda, y0, 4, alturaBox).fill(corBarra);
+
+      documento.fillColor(CORES.fundoEscuro).font('Helvetica-Bold').fontSize(13)
+        .text(titulo, margemEsquerda + paddingBox, y0 + paddingBox - 2);
+
+      let yLinha = y0 + paddingBox + alturaTitulo - 4;
+      linhas.forEach((linha) => {
+        if (linha.divisor) {
+          documento.moveTo(margemEsquerda + paddingBox, yLinha - 4)
+            .lineTo(margemEsquerda + larguraConteudo - paddingBox, yLinha - 4)
+            .strokeColor(CORES.cinzaClaro).lineWidth(1).stroke();
+        }
+        documento.font(linha.negrito ? 'Helvetica-Bold' : 'Helvetica').fontSize(11)
+          .fillColor(linha.cor || CORES.fundoEscuro)
+          .text(linha.label, margemEsquerda + paddingBox, yLinha, { lineBreak: false });
+        documento.font(linha.negrito ? 'Helvetica-Bold' : 'Helvetica').fontSize(11)
+          .fillColor(linha.cor || CORES.fundoEscuro)
+          .text(linha.valor, margemEsquerda + paddingBox, yLinha, {
+            width: larguraConteudo - paddingBox * 2,
+            align: 'right'
+          });
+        yLinha += alturaLinha;
+      });
+
+      documento.y = y0 + alturaBox + 18;
+      documento.fillColor(CORES.fundoEscuro);
     }
-    documento.moveDown(0.3);
-    documento.font('Helvetica-Bold').text(`Total de gastos: ${formatarValor(totalGastos)}`);
+
+    desenharSecao('Vendas', CORES.azul, [
+      { label: 'Quantidade de vendas', valor: String(quantidade) },
+      { label: 'Total vendido', valor: formatarValor(totalVendido) },
+      { label: 'Total pago', valor: formatarValor(totalPago), negrito: true }
+    ]);
+
+    desenharSecao('Gastos', CORES.laranja, [
+      ...CATEGORIAS_DESPESA.map((categoria) => ({
+        label: ROTULOS_DESPESA[categoria],
+        valor: formatarValor(totaisPorCategoria[categoria])
+      })),
+      { label: 'Total de gastos', valor: formatarValor(totalGastos), negrito: true, divisor: true }
+    ]);
+
+    desenharSecao('Saldo do período', saldo >= 0 ? CORES.verde : CORES.vermelho, [
+      {
+        label: 'Total pago - total de gastos',
+        valor: formatarValor(saldo),
+        negrito: true,
+        cor: saldo >= 0 ? CORES.verde : CORES.vermelho
+      }
+    ]);
+
     documento.moveDown(1);
-
-    const saldo = Number(totalPago) - totalGastos;
-    documento.font('Helvetica-Bold').fontSize(13).text('Saldo do período');
-    documento.moveDown(0.3);
-    documento.font('Helvetica').fontSize(11).text(`Total pago - total de gastos: ${formatarValor(saldo)}`);
-
-    documento.moveDown(2);
-    documento.font('Helvetica').fontSize(8).text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
+    documento.moveTo(margemEsquerda, documento.y)
+      .lineTo(margemEsquerda + larguraConteudo, documento.y)
+      .strokeColor(CORES.cinzaClaro).lineWidth(1).stroke();
+    documento.moveDown(0.6);
+    documento.font('Helvetica').fontSize(8).fillColor(CORES.cinza)
+      .text(`Relatório gerado em ${new Date().toLocaleString('pt-BR')}`, { align: 'center' });
 
     documento.end();
   } catch (err) {
