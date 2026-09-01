@@ -1031,10 +1031,19 @@ html.perfil-relatorios .hub-card-operacional {
   border-radius: 6px;
 }
 
-.despesa-item span {
+.despesa-item {
+  flex-wrap: wrap;
+}
+
+.despesa-item-info {
   display: block;
   color: #68737d;
   font-size: 12px;
+}
+
+.despesa-item > div {
+  display: grid;
+  gap: 5px;
 }
 
 .despesa-item-acoes {
@@ -1056,6 +1065,22 @@ html.perfil-relatorios .hub-card-operacional {
   cursor: pointer;
   font-size: 11px;
   font-weight: bold;
+}
+
+.btn-pagar-despesa {
+  padding: 6px 10px;
+  color: var(--cor-branca);
+  background-color: #168c4b;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.btn-pagar-despesa:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .total-despesas-periodo {

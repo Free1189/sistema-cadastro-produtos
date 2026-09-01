@@ -168,7 +168,7 @@ criarTabelaVendas.then(() => db.query(`
 `)).catch((err) => console.error('erro ao preparar tabela cobrancas_asaas', err));
 
 
-criarTabelaVendas.then(() => db.query(`
+const criarTabelaDespesas = criarTabelaVendas.then(() => db.query(`
   CREATE TABLE IF NOT EXISTS despesas (
     id SERIAL PRIMARY KEY,
     categoria VARCHAR(30) NOT NULL,
@@ -178,6 +178,18 @@ criarTabelaVendas.then(() => db.query(`
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )
 `)).catch((err) => console.error('erro ao criar tabela despesas', err));
+
+criarTabelaDespesas.then(() => db.query(`
+  ALTER TABLE despesas
+    ADD COLUMN IF NOT EXISTS vencimento DATE,
+    ADD COLUMN IF NOT EXISTS status_pagamento VARCHAR(20) NOT NULL DEFAULT 'pendente',
+    ADD COLUMN IF NOT EXISTS pago_em TIMESTAMP
+`)).then(() => db.query(`
+  UPDATE despesas SET vencimento = data_despesa WHERE vencimento IS NULL
+`)).then(() => db.query(`
+  UPDATE despesas SET status_pagamento = 'pago', pago_em = criado_em
+  WHERE criado_em < '2026-09-01 00:00:00' AND status_pagamento = 'pendente'
+`)).catch((err) => console.error('erro ao preparar tabela despesas', err));
 
 module.exports = db; // exporta a conexão pronta para ser usado no js do front
 

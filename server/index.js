@@ -1568,8 +1568,8 @@ app.post('/produtos', async (req, res) => {
       const valorCustoEntrada = Number(precoCusto) * estoqueFormatado;
       if (estoqueFormatado > 0 && Number.isFinite(valorCustoEntrada) && valorCustoEntrada > 0) {
         await cliente.query(
-          `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
-           VALUES ('produto', $1, $2, CURRENT_DATE)`,
+          `INSERT INTO despesas (categoria, descricao, valor, data_despesa, vencimento)
+           VALUES ('produto', $1, $2, CURRENT_DATE, CURRENT_DATE)`,
           [`Entrada de estoque: ${nome} (${estoqueFormatado} un.)`, valorCustoEntrada]
         );
       }
@@ -1626,8 +1626,8 @@ app.put('/produtos/:id', async (req, res) => {
       const valorCustoEntrada = Number(precoCusto) * estoqueAdicionado;
       if (estoqueAdicionado > 0 && Number.isFinite(valorCustoEntrada) && valorCustoEntrada > 0) {
         await cliente.query(
-          `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
-           VALUES ('produto', $1, $2, CURRENT_DATE)`,
+          `INSERT INTO despesas (categoria, descricao, valor, data_despesa, vencimento)
+           VALUES ('produto', $1, $2, CURRENT_DATE, CURRENT_DATE)`,
           [`Entrada de estoque: ${nome} (${estoqueAdicionado} un.)`, valorCustoEntrada]
         );
       }
@@ -1717,8 +1717,8 @@ app.post('/notas/importar', upload.single('xml'), async (req, res) => {
         const valorCustoEntrada = precoCusto * quantidade;
         if (valorCustoEntrada > 0) {
           await cliente.query(
-            `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
-             VALUES ('produto', $1, $2, CURRENT_DATE)`,
+            `INSERT INTO despesas (categoria, descricao, valor, data_despesa, vencimento)
+             VALUES ('produto', $1, $2, CURRENT_DATE, CURRENT_DATE)`,
             [`Compra via NFC-e (${codigoNfce}): ${nome} (${quantidade} un.)`, valorCustoEntrada]
           );
         }
@@ -1784,17 +1784,19 @@ app.post('/despesas', async (req, res) => {
   const descricao = String(req.body.descricao || '').trim().slice(0, 200);
   const valor = Number.parseFloat(req.body.valor);
   const data = String(req.body.data || '');
+  const vencimento = String(req.body.vencimento || '');
 
-  if (!CATEGORIAS_DESPESA.includes(categoria) || !Number.isFinite(valor) || valor <= 0 || !periodoValido(data, data)) {
-    return res.status(400).json({ err: 'Informe categoria, valor e data válidos' });
+  if (!CATEGORIAS_DESPESA.includes(categoria) || !Number.isFinite(valor) || valor <= 0
+    || !periodoValido(data, data) || !periodoValido(vencimento, vencimento)) {
+    return res.status(400).json({ err: 'Informe categoria, valor, data e prazo válidos' });
   }
 
   try {
     const resultado = await db.query(
-      `INSERT INTO despesas (categoria, descricao, valor, data_despesa)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, categoria, descricao, valor, data_despesa`,
-      [categoria, descricao || null, valor, data]
+      `INSERT INTO despesas (categoria, descricao, valor, data_despesa, vencimento)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, categoria, descricao, valor, data_despesa, vencimento, status_pagamento, pago_em`,
+      [categoria, descricao || null, valor, data, vencimento]
     );
     res.status(201).json(resultado.rows[0]);
   } catch (err) {
@@ -1813,7 +1815,7 @@ app.get('/despesas', async (req, res) => {
 
   try {
     const resultado = await db.query(
-      `SELECT id, categoria, descricao, valor, data_despesa
+      `SELECT id, categoria, descricao, valor, data_despesa, vencimento, status_pagamento, pago_em
        FROM despesas
        WHERE data_despesa BETWEEN $1 AND $2
        ORDER BY data_despesa DESC, id DESC`,
@@ -1823,6 +1825,28 @@ app.get('/despesas', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ err: 'Erro ao buscar despesas' });
+  }
+});
+
+app.put('/despesas/:id/pagar', async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ err: 'ID da despesa inválido' });
+  }
+
+  try {
+    const resultado = await db.query(
+      `UPDATE despesas SET status_pagamento = 'pago', pago_em = CURRENT_TIMESTAMP
+       WHERE id = $1 AND status_pagamento = 'pendente'
+       RETURNING id, pago_em`,
+      [id]
+    );
+    if (resultado.rowCount === 0) return res.status(404).json({ err: 'Despesa não encontrada ou já paga' });
+    res.json(resultado.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Erro ao marcar despesa como paga' });
   }
 });
 

@@ -11,6 +11,7 @@ const inputPeriodoFim = document.getElementById('inputPeriodoFim');
 const selectCategoriaDespesa = document.getElementById('selectCategoriaDespesa');
 const inputValorDespesa = document.getElementById('inputValorDespesa');
 const inputDataDespesa = document.getElementById('inputDataDespesa');
+const inputPrazoDespesa = document.getElementById('inputPrazoDespesa');
 const inputDescricaoDespesa = document.getElementById('inputDescricaoDespesa');
 const btnLancarDespesa = document.getElementById('btnLancarDespesa');
 
@@ -52,6 +53,7 @@ function definirPeriodoPadrao() {
   inputPeriodoInicio.value = paraDataInput(inicioMes);
   inputPeriodoFim.value = paraDataInput(hoje);
   inputDataDespesa.value = paraDataInput(hoje);
+  inputPrazoDespesa.value = paraDataInput(hoje);
 }
 
 async function carregarDespesas() {
@@ -70,19 +72,41 @@ async function carregarDespesas() {
     totalDespesasPeriodo.textContent = despesas.length > 0 ? `Total do período: ${dinheiro(total)}` : '';
 
     despesas.forEach((despesa) => {
+      const pago = despesa.status_pagamento === 'pago';
+      const statusInfo = pago
+        ? `<span class="aviso-enviado-badge">✓ Pago em ${new Date(despesa.pago_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>`
+        : `<span class="aviso-pendente-badge">Pendente</span>`;
       const linha = document.createElement('article');
       linha.className = 'despesa-item';
       linha.innerHTML = `
         <div>
           <strong>${ROTULOS_CATEGORIA[despesa.categoria] || despesa.categoria}</strong>
-          <span>${formatarData(despesa.data_despesa)}${despesa.descricao ? ` · ${despesa.descricao}` : ''}</span>
+          <span class="despesa-item-info">Lançado em ${formatarData(despesa.data_despesa)} · Prazo: ${formatarData(despesa.vencimento)}${despesa.descricao ? ` · ${despesa.descricao}` : ''}</span>
+          ${statusInfo}
         </div>
         <div class="despesa-item-acoes">
           <b>${dinheiro(despesa.valor)}</b>
+          ${pago ? '' : `<button type="button" class="btn-pagar-despesa" data-id="${despesa.id}">Marcar como pago</button>`}
           <button type="button" class="btn-excluir-despesa" data-id="${despesa.id}" aria-label="Excluir despesa">Excluir</button>
         </div>
       `;
       listaDespesas.appendChild(linha);
+    });
+
+    listaDespesas.querySelectorAll('.btn-pagar-despesa').forEach((botao) => {
+      botao.addEventListener('click', async () => {
+        botao.disabled = true;
+        try {
+          const resposta = await fetch(`${API_URL}/despesas/${botao.dataset.id}/pagar`, { method: 'PUT' });
+          const resultado = await resposta.json();
+          if (!resposta.ok) throw new Error(resultado.err || 'Não foi possível marcar a despesa como paga');
+          mostrarMensagem('Despesa marcada como paga.');
+          carregarDespesas();
+        } catch (err) {
+          mostrarMensagem(err.message, true);
+          botao.disabled = false;
+        }
+      });
     });
 
     listaDespesas.querySelectorAll('.btn-excluir-despesa').forEach((botao) => {
@@ -105,10 +129,11 @@ btnLancarDespesa.addEventListener('click', async () => {
   const categoria = selectCategoriaDespesa.value;
   const valor = Number.parseFloat(inputValorDespesa.value);
   const data = inputDataDespesa.value;
+  const vencimento = inputPrazoDespesa.value;
   const descricao = inputDescricaoDespesa.value.trim();
 
-  if (!Number.isFinite(valor) || valor <= 0 || !data) {
-    mostrarMensagem('Informe um valor e uma data válidos para a despesa.', true);
+  if (!Number.isFinite(valor) || valor <= 0 || !data || !vencimento) {
+    mostrarMensagem('Informe um valor, uma data e um prazo válidos para a despesa.', true);
     return;
   }
 
@@ -117,7 +142,7 @@ btnLancarDespesa.addEventListener('click', async () => {
     const resposta = await fetch(`${API_URL}/despesas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categoria, valor, data, descricao })
+      body: JSON.stringify({ categoria, valor, data, vencimento, descricao })
     });
     const resultado = await resposta.json();
     if (!resposta.ok) throw new Error(resultado.err || 'Não foi possível lançar a despesa');
