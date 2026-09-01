@@ -7,11 +7,17 @@ const { conectarWhatsApp, enviarCobranca, obterStatusWhatsApp } = require('./wha
 const { criarCobranca, criarCobrancaUnica, consultarCobranca } = require('./asaas');
 require('dotenv').config();
 
-const db = require('./db'); // importa conexão do banco 
+const db = require('./db'); // importa conexão do banco
 
+process.on('unhandledRejection', (err) => {
+  console.error('Erro não tratado (unhandledRejection), servidor continua no ar:', err);
+});
 
+process.on('uncaughtException', (err) => {
+  console.error('Erro não tratado (uncaughtException), servidor continua no ar:', err);
+});
 
-const app = express();  // cria a aplicação do servidor 
+const app = express();  // cria a aplicação do servidor
 app.use(cors());
 app.use(express.json()); // ensino o servidor dados JSON
 const upload = multer({
