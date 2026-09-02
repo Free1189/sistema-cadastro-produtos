@@ -19,6 +19,9 @@ server/.wwebjs_cache/
 npm-debug.log*
 .servidor-pid
 
+# Backups do banco (dados reais de clientes, nunca versionar)
+backups/
+
 # Sistema operacional
 .DS_Store
 Thumbs.db

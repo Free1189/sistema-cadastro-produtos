@@ -5,16 +5,20 @@ const { XMLParser } = require('fast-xml-parser');
 const PDFDocument = require('pdfkit');
 const { conectarWhatsApp, enviarCobranca, obterStatusWhatsApp } = require('./whatsapp');
 const { criarCobranca, criarCobrancaUnica, consultarCobranca } = require('./asaas');
+const { dispararAlerta } = require('./alerta');
+const { documentoValido, periodoValido, calcularProximaExecucao } = require('./utils');
 require('dotenv').config();
 
 const db = require('./db'); // importa conexão do banco
 
 process.on('unhandledRejection', (err) => {
   console.error('Erro não tratado (unhandledRejection), servidor continua no ar:', err);
+  dispararAlerta('Erro no servidor', `Ocorreu um erro inesperado no sistema (${err?.message || err}). O servidor continua no ar, mas verifique o WhatsApp.`);
 });
 
 process.on('uncaughtException', (err) => {
   console.error('Erro não tratado (uncaughtException), servidor continua no ar:', err);
+  dispararAlerta('Erro no servidor', `Ocorreu um erro inesperado no sistema (${err?.message || err}). O servidor continua no ar, mas verifique o WhatsApp.`);
 });
 
 const app = express();  // cria a aplicação do servidor
@@ -99,16 +103,7 @@ async function enviarAvisosDeAtraso() {
 }
 
 function agendarTarefaDiaria(hora, minuto, tarefa) {
-  function proximaExecucao() {
-    const agora = new Date();
-    const proxima = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), hora, minuto, 0, 0);
-    if (proxima <= agora) {
-      proxima.setDate(proxima.getDate() + 1);
-    }
-    return proxima;
-  }
-
-  const espera = proximaExecucao().getTime() - Date.now();
+  const espera = calcularProximaExecucao(hora, minuto).getTime() - Date.now();
   setTimeout(() => {
     tarefa();
     setInterval(tarefa, 24 * 60 * 60 * 1000);
@@ -166,6 +161,9 @@ async function sincronizarPagamentosAsaas(asaasPaymentId = null) {
            WHERE id = $2`,
             [pagoVenda, venda.id]
           );
+          if (pagoVenda >= totalVenda) {
+            avisarQuitacaoVendaAPrazo(venda.id);
+          }
           restantePago -= pagoVenda;
         }
       } catch (err) {
@@ -174,6 +172,42 @@ async function sincronizarPagamentosAsaas(asaasPaymentId = null) {
     }
   } catch (err) {
     console.error('Erro ao sincronizar pagamentos Asaas:', err.message);
+  }
+}
+
+async function avisarQuitacaoVendaAPrazo(vendaId) {
+  try {
+    const resultado = await db.query(
+      `SELECT v.id, v.cliente_id, v.cliente_nome, v.tipo_pagamento, c.telefone
+       FROM vendas v
+       LEFT JOIN clientes c ON c.id = v.cliente_id
+       WHERE v.id = $1 AND v.status_pagamento = 'pago'`,
+      [vendaId]
+    );
+    if (resultado.rowCount === 0) return;
+
+    const venda = resultado.rows[0];
+    if (!venda.telefone || !venda.cliente_id) return;
+    if (!['pix', 'boleto'].includes(venda.tipo_pagamento)) return;
+
+    const pendencias = await db.query(
+      `SELECT COUNT(*)::int AS quantidade,
+              COALESCE(SUM(GREATEST(total + juros - COALESCE(valor_pago, 0), 0)), 0)::numeric AS total_pendente
+       FROM vendas
+       WHERE cliente_id = $1 AND tipo_pagamento = 'futuro' AND status = 'finalizada' AND status_pagamento = 'pendente'`,
+      [venda.cliente_id]
+    );
+    const { quantidade, total_pendente: totalPendente } = pendencias.rows[0];
+
+    const rodape = Number(quantidade) > 0
+      ? `Você ainda possui ${quantidade} conta(s) pendente(s) em aberto, no valor total de R$ ${Number(totalPendente).toFixed(2).replace('.', ',')}. Assim que possível, entre em contato para regularizar.`
+      : 'Você não possui mais nenhuma pendência conosco no momento.';
+
+    const mensagem = `*Marau Luz e Água*\n\nOlá, ${venda.cliente_nome}. Recebemos o seu pagamento e sua conta foi quitada. Muito obrigado pela confiança!\n\n${rodape}`;
+
+    await enviarCobranca(venda.telefone, mensagem);
+  } catch (err) {
+    console.error(`Não foi possível avisar quitação da venda #${vendaId}:`, err.message);
   }
 }
 
@@ -248,38 +282,6 @@ app.get('/clientes/:id', async (req, res) => {
     res.status(500).json({ err: 'Erro ao buscar cliente' });
   }
 });
-
-function documentoValido(documento) {
-  const numeros = String(documento || '').replace(/\D/g, '');
-
-  if (/^(\d)\1+$/.test(numeros)) return false;
-
-  if (numeros.length === 11) {
-    const calcularDigito = (tamanho) => {
-      let soma = 0;
-      for (let indice = 0; indice < tamanho; indice++) {
-        soma += Number(numeros[indice]) * (tamanho + 1 - indice);
-      }
-      const resto = (soma * 10) % 11;
-      return resto === 10 ? 0 : resto;
-    };
-    return calcularDigito(9) === Number(numeros[9]) && calcularDigito(10) === Number(numeros[10]);
-  }
-
-  if (numeros.length === 14) {
-    const pesos = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-    const calcularDigito = (base, pesosUsados) => {
-      const soma = base.split('').reduce((total, numero, indice) => total + Number(numero) * pesosUsados[indice], 0);
-      const resto = soma % 11;
-      return resto < 2 ? 0 : 11 - resto;
-    };
-    const primeiro = calcularDigito(numeros.slice(0, 12), pesos.slice(1));
-    const segundo = calcularDigito(numeros.slice(0, 12) + primeiro, pesos);
-    return primeiro === Number(numeros[12]) && segundo === Number(numeros[13]);
-  }
-
-  return false;
-}
 
 app.post('/caixa/comprovante', (req, res) => {
   const { valor, descricao, metodoPagamento, documento } = req.body;
@@ -1221,6 +1223,10 @@ app.put('/cobrancas-prazo/finalizar', async (req, res) => {
       return res.status(400).json({ err: 'Uma ou mais vendas não estão disponíveis para finalização' });
     }
 
+    for (const venda of resultado.rows) {
+      avisarQuitacaoVendaAPrazo(venda.id);
+    }
+
     res.json({ vendaIds: resultado.rows.map((venda) => venda.id) });
   } catch (err) {
     console.error(err);
@@ -1252,6 +1258,9 @@ app.put('/cobrancas/:id/pagar', async (req, res) => {
     if (resultado.rowCount === 0) {
       return res.status(404).json({ err: 'Cobrança não encontrada ou já paga' });
     }
+
+    avisarQuitacaoVendaAPrazo(id);
+
     res.json(resultado.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1774,10 +1783,6 @@ const ROTULOS_DESPESA = {
   produto: 'Compra de produtos',
   outro: 'Outros gastos'
 };
-
-function periodoValido(inicio, fim) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(inicio) && /^\d{4}-\d{2}-\d{2}$/.test(fim);
-}
 
 app.post('/despesas', async (req, res) => {
   const categoria = String(req.body.categoria || '');

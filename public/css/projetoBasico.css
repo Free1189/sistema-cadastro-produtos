@@ -252,16 +252,35 @@ header {
   border-left-color: var(--cor-azul);
 }
 
-.hub-card-financeiro {
+.hub-secao-financeira {
   display: none;
 }
 
-html.perfil-relatorios .hub-card-financeiro {
-  display: flex;
+html.perfil-relatorios .hub-secao-financeira {
+  display: block;
 }
 
-html.perfil-relatorios .hub-card-operacional {
+html.perfil-relatorios .hub-secao-operacional {
   display: none;
+}
+
+.hub-grupo + .hub-grupo {
+  margin-top: 26px;
+}
+
+.hub-grupo-titulo {
+  margin-bottom: 12px;
+  color: var(--cor-cinza);
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.hub-grupo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .operacoes-header {

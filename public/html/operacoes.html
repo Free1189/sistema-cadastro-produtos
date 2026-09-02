@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/projetoBasico.css">
+  <title>Operações - Marau Luz e Água</title>
+</head>
+
+<body>
+  <main class="hub-container operacoes-container">
+    <header class="hub-header operacoes-header">
+      <div>
+        <p class="hub-kicker">Comandos rápidos</p>
+        <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      </div>
+      <div class="operacoes-header-actions">
+        <button type="button" id="btnVoltar" class="btn-sair">Voltar</button>
+      </div>
+    </header>
+
+    <section class="hub-content" aria-labelledby="tituloOperacoes">
+      <div class="hub-intro">
+        <p class="hub-kicker">Menu de operações</p>
+        <h2 id="tituloOperacoes">Escolha o comando que deseja abrir</h2>
+      </div>
+
+      <nav class="operacoes-grid" aria-label="Comandos do sistema">
+        <div class="hub-grupo">
+          <h3 class="hub-grupo-titulo">Vendas</h3>
+          <div class="hub-grupo-grid">
+            <button type="button" class="hub-card hub-card-destaque operacao-card" data-link="vendas.html">
+              <span class="hub-card-index">01</span>
+              <span class="hub-card-title">Vendas</span>
+              <span class="hub-card-status">Iniciar operação</span>
+            </button>
+            <button type="button" class="hub-card operacao-card" data-link="caixa.html">
+              <span class="hub-card-index">02</span>
+              <span class="hub-card-title">Caixa</span>
+              <span class="hub-card-status">Receber pagamentos</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="hub-grupo">
+          <h3 class="hub-grupo-titulo">Clientes</h3>
+          <div class="hub-grupo-grid">
+            <button type="button" class="hub-card operacao-card" data-link="clientes.html">
+              <span class="hub-card-index">01</span>
+              <span class="hub-card-title">Clientes</span>
+              <span class="hub-card-status">Cadastro e consulta</span>
+            </button>
+            <button type="button" class="hub-card operacao-card" data-link="devolucoes.html">
+              <span class="hub-card-index">02</span>
+              <span class="hub-card-title">Devoluções</span>
+              <span class="hub-card-status">Registrar retorno</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="hub-grupo">
+          <h3 class="hub-grupo-titulo">Cobranças</h3>
+          <div class="hub-grupo-grid">
+            <button type="button" class="hub-card operacao-card" data-link="cobrancas.html" data-perfil="admin">
+              <span class="hub-card-index">01</span>
+              <span class="hub-card-title">Cobranças</span>
+              <span class="hub-card-status">Lembretes e gestão</span>
+            </button>
+            <button type="button" class="hub-card operacao-card" data-link="cobrancas-prazo.html" data-perfil="admin">
+              <span class="hub-card-index">02</span>
+              <span class="hub-card-title">Pagamentos a prazo</span>
+              <span class="hub-card-status">Controle financeiro</span>
+            </button>
+            <button type="button" class="hub-card operacao-card" data-link="vendas-total.html" data-perfil="admin">
+              <span class="hub-card-index">03</span>
+              <span class="hub-card-title">Resumo de vendas</span>
+              <span class="hub-card-status">Totais e relatórios</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="hub-grupo">
+          <h3 class="hub-grupo-titulo">Produtos</h3>
+          <div class="hub-grupo-grid">
+            <button type="button" class="hub-card hub-card-destaque operacao-card" data-link="index.html"
+              data-perfil="admin">
+              <span class="hub-card-index">01</span>
+              <span class="hub-card-title">Produtos</span>
+              <span class="hub-card-status">Cadastro e estoque</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <p id="hubMensagem" class="hub-mensagem" role="status"></p>
+    </section>
+  </main>
+
+  <script src="../js/operacoes.js"></script>
+</body>
+
+</html>

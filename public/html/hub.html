@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/projetoBasico.css">
+  <title>Hub - Marau Luz e Água</title>
+  <script>
+    if (sessionStorage.getItem('perfil') === 'relatorios') {
+      document.documentElement.classList.add('perfil-relatorios');
+    }
+  </script>
+</head>
+
+<body>
+  <main class="hub-container">
+    <header class="hub-header">
+      <div>
+        <p class="hub-kicker">Central de operações</p>
+        <h1>Marau <span class="cor-amarela">Luz</span> e <span class="cor-azul">Água</span></h1>
+      </div>
+      <button type="button" id="btnSair" class="btn-sair">Sair</button>
+    </header>
+
+    <section class="hub-content" aria-labelledby="tituloHub">
+      <div class="hub-intro">
+        <p class="hub-kicker">Painel principal</p>
+        <h2 id="tituloHub">Escolha uma área para continuar</h2>
+      </div>
+
+      <nav aria-label="Módulos do sistema">
+        <div class="hub-secao-financeira">
+          <div class="hub-grid">
+            <a class="hub-card hub-card-destaque" href="contas-a-pagar.html" id="hubCardContasPagar">
+              <span class="hub-card-index">01</span>
+              <span class="hub-card-title">Contas a pagar</span>
+              <span class="hub-card-status">Despesas e gastos</span>
+            </a>
+            <a class="hub-card hub-card-destaque" href="contas-a-receber.html" id="hubCardContasReceber">
+              <span class="hub-card-index">02</span>
+              <span class="hub-card-title">Contas a receber</span>
+              <span class="hub-card-status">Cobranças e parcelas</span>
+            </a>
+            <a class="hub-card hub-card-vip" href="relatorio.html" id="hubCardRelatorio">
+              <span class="hub-card-index">03</span>
+              <span class="hub-card-title">Relatório geral</span>
+              <span class="hub-card-status">Acesso exclusivo</span>
+            </a>
+            <a class="hub-card hub-card-secundario" href="operacoes.html" id="hubCardOperacoes">
+              <span class="hub-card-index">04</span>
+              <span class="hub-card-title">Operações</span>
+              <span class="hub-card-status">Demais módulos do sistema</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="hub-secao-operacional">
+          <div class="hub-grupo">
+            <h3 class="hub-grupo-titulo">Vendas</h3>
+            <div class="hub-grupo-grid">
+              <a class="hub-card hub-card-destaque" href="vendas.html">
+                <span class="hub-card-index">01</span>
+                <span class="hub-card-title">Vendas</span>
+                <span class="hub-card-status">Registrar venda</span>
+              </a>
+              <a class="hub-card" href="caixa.html" data-perfil="admin">
+                <span class="hub-card-index">02</span>
+                <span class="hub-card-title">Caixa</span>
+                <span class="hub-card-status">Receber pagamentos</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="hub-grupo">
+            <h3 class="hub-grupo-titulo">Clientes</h3>
+            <div class="hub-grupo-grid">
+              <a class="hub-card" href="clientes.html">
+                <span class="hub-card-index">01</span>
+                <span class="hub-card-title">Clientes</span>
+                <span class="hub-card-status">Cadastro e busca</span>
+              </a>
+              <a class="hub-card" href="devolucoes.html">
+                <span class="hub-card-index">02</span>
+                <span class="hub-card-title">Devoluções</span>
+                <span class="hub-card-status">Gerenciar devoluções</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="hub-grupo">
+            <h3 class="hub-grupo-titulo">Cobranças</h3>
+            <div class="hub-grupo-grid">
+              <a class="hub-card" href="cobrancas.html" data-perfil="admin">
+                <span class="hub-card-index">01</span>
+                <span class="hub-card-title">Cobranças</span>
+                <span class="hub-card-status">Avisos e gestão</span>
+              </a>
+              <a class="hub-card" href="cobrancas-prazo.html" data-perfil="admin">
+                <span class="hub-card-index">02</span>
+                <span class="hub-card-title">Pagamentos a prazo</span>
+                <span class="hub-card-status">Controle de parcelas</span>
+              </a>
+              <a class="hub-card" href="vendas-total.html" data-perfil="admin">
+                <span class="hub-card-index">03</span>
+                <span class="hub-card-title">Resumo de vendas</span>
+                <span class="hub-card-status">Relatórios</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="hub-grupo">
+            <h3 class="hub-grupo-titulo">Produtos</h3>
+            <div class="hub-grupo-grid">
+              <a class="hub-card hub-card-destaque" href="index.html" data-perfil="admin">
+                <span class="hub-card-index">01</span>
+                <span class="hub-card-title">Produtos</span>
+                <span class="hub-card-status">Cadastro e estoque</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+      <p id="hubMensagem" class="hub-mensagem" role="status"></p>
+    </section>
+  </main>
+  <script src="../js/hub.js"></script>
+</body>
+
+</html>

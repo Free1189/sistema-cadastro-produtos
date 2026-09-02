@@ -2,6 +2,7 @@ const path = require('path');
 const qrcodeTerminal = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const { dispararAlerta } = require('./alerta');
 
 const QR_IMAGE_PATH = path.join(__dirname, 'whatsapp-qr.png');
 const AUTH_DIR = path.join(__dirname, '..', '.wwebjs_auth');
@@ -163,5 +164,26 @@ async function enviarCobranca(telefone, mensagem) {
 function obterStatusWhatsApp() {
   return statusConexao;
 }
+
+let alertaQuedaDisparado = false;
+
+function verificarSaudeConexao() {
+  if (providerWhatsApp() === 'meta') return;
+
+  if (!statusConexao.conectado) {
+    if (!alertaQuedaDisparado) {
+      alertaQuedaDisparado = true;
+      dispararAlerta(
+        'WhatsApp desconectado',
+        `O sistema de mensagens do Marau Luz e Água está fora do ar (estado: ${statusConexao.estado}). O sistema tenta reconectar sozinho, mas verifique se persistir.`
+      );
+    }
+  } else if (alertaQuedaDisparado) {
+    alertaQuedaDisparado = false;
+    dispararAlerta('WhatsApp reconectado', 'O sistema de mensagens do Marau Luz e Água voltou a funcionar normalmente.');
+  }
+}
+
+setInterval(verificarSaudeConexao, 3 * 60 * 1000);
 
 module.exports = { conectarWhatsApp, enviarCobranca, obterStatusWhatsApp };

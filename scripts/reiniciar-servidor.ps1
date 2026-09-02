@@ -1,4 +1,4 @@
-$raiz = $PSScriptRoot
+$raiz = Split-Path -Parent $PSScriptRoot
 $logFile = Join-Path $raiz "server\reinicio-automatico.log"
 
 function Registrar($mensagem) {
