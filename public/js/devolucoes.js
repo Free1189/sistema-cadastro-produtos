@@ -34,6 +34,12 @@ async function carregarClientes() {
 }
 
 buscaCliente.addEventListener('input', carregarClientes);
+buscaCliente.addEventListener('keydown', (evento) => {
+  if (evento.key !== 'Enter') return;
+  evento.preventDefault();
+  const primeiraOpcao = listaClientes.querySelector('.cliente-devolucao-card');
+  if (primeiraOpcao) primeiraOpcao.click();
+});
 
 function selecionarCliente(cliente) {
   clienteAtual = cliente;

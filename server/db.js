@@ -23,6 +23,9 @@ db.connect((err) => { // tenta abrir a conexão
   }
 })
 
+const habilitarBuscaAproximada = db.query('CREATE EXTENSION IF NOT EXISTS pg_trgm')
+  .catch((err) => console.error('erro ao habilitar extensao pg_trgm (busca aproximada)', err));
+
 const criarTabelaClientes = db.query(`
   CREATE TABLE IF NOT EXISTS clientes (
     id SERIAL PRIMARY KEY,
@@ -41,6 +44,14 @@ const prepararTabelaClientes = criarTabelaClientes.then(() => db.query(`
     ADD COLUMN IF NOT EXISTS numero VARCHAR(20),
     ADD COLUMN IF NOT EXISTS bairro VARCHAR(100)
 `)).catch((err) => console.error('erro ao preparar tabela clientes', err));
+
+Promise.all([habilitarBuscaAproximada, prepararTabelaClientes])
+  .then(() => db.query('CREATE INDEX IF NOT EXISTS idx_clientes_nome_trgm ON clientes USING gin (nome gin_trgm_ops)'))
+  .catch((err) => console.error('erro ao criar indice trigram de clientes', err));
+
+habilitarBuscaAproximada
+  .then(() => db.query('CREATE INDEX IF NOT EXISTS idx_produtos_nome_trgm ON produtos USING gin (nome gin_trgm_ops)'))
+  .catch((err) => console.error('erro ao criar indice trigram de produtos', err));
 
 const criarTabelaVendas = prepararTabelaClientes.then(() => db.query(`
   CREATE TABLE IF NOT EXISTS vendas (

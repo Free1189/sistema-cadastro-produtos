@@ -14,10 +14,36 @@ const mensagemVenda = document.getElementById('mensagemVenda');
 const clienteVenda = document.getElementById('clienteVenda');
 const clienteIdVenda = document.getElementById('clienteIdVenda');
 const resultadosClientes = document.getElementById('resultadosClientes');
+const btnAbrirCatalogo = document.getElementById('btnAbrirCatalogo');
+const modalCatalogo = document.getElementById('modalCatalogo');
+const btnFecharCatalogo = document.getElementById('btnFecharCatalogo');
+const buscaCatalogo = document.getElementById('buscaCatalogo');
+const grelhaCatalogo = document.getElementById('grelhaCatalogo');
+const catalogoVazio = document.getElementById('catalogoVazio');
+const mensagemCatalogo = document.getElementById('mensagemCatalogo');
+const btnCatalogoAnterior = document.getElementById('btnCatalogoAnterior');
+const btnCatalogoProxima = document.getElementById('btnCatalogoProxima');
+const paginaCatalogoInfo = document.getElementById('paginaCatalogoInfo');
 const carrinho = [];
+let paginaCatalogoAtual = 1;
+let totalPaginasCatalogo = 1;
 
 function dinheiro(valor) {
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function infoEstoque(quantidade) {
+  if (quantidade <= 0) return { texto: `Sem estoque (${quantidade})`, classe: 'badge-estoque-zerado' };
+  if (quantidade <= 3) return { texto: `Estoque baixo: ${quantidade}`, classe: 'badge-estoque-baixo' };
+  return { texto: `Estoque: ${quantidade}`, classe: 'badge-estoque-ok' };
+}
+
+function infoEstoqueResultante(estoqueDisponivel, quantidadeVendida) {
+  const resultante = estoqueDisponivel - quantidadeVendida;
+  if (resultante < 0) return { texto: `Estoque ficará negativo: ${resultante}`, classe: 'badge-estoque-zerado' };
+  if (resultante === 0) return { texto: 'Esgota o estoque', classe: 'badge-estoque-baixo' };
+  if (resultante <= 3) return { texto: `Restam ${resultante}`, classe: 'badge-estoque-baixo' };
+  return { texto: `Restam ${resultante}`, classe: 'badge-estoque-ok' };
 }
 
 function atualizarResumo() {
@@ -34,9 +60,14 @@ function renderizarCarrinho() {
   carrinhoVazio.hidden = carrinho.length > 0;
 
   carrinho.forEach((item, indice) => {
+    const estoqueInfo = infoEstoqueResultante(item.estoqueDisponivel ?? 0, item.quantidade);
     const linha = document.createElement('tr');
     linha.innerHTML = `
-      <td>${item.nome}<small>Código: ${item.id}</small></td>
+      <td>
+        <div class="produto-venda-nome">${item.nome}</div>
+        <small>Código: ${item.id}</small>
+        <span class="badge-estoque ${estoqueInfo.classe}">${estoqueInfo.texto}</span>
+      </td>
       <td><input class="quantidade-item" type="number" min="1" value="${item.quantidade}" data-indice="${indice}"></td>
       <td>
         <input class="preco-item" type="number" min="0" step="0.01" value="${item.preco.toFixed(2)}" data-indice="${indice}" disabled>
@@ -84,16 +115,17 @@ function renderizarCarrinho() {
   atualizarResumo();
 }
 
-function adicionarProduto(produto) {
+function adicionarProduto(produto, quantidade = 1) {
   const existente = carrinho.find((item) => item.id === produto.id);
   if (existente) {
-    existente.quantidade++;
+    existente.quantidade += quantidade;
   } else {
     carrinho.push({
       id: produto.id,
       nome: produto.nome,
-      quantidade: 1,
-      preco: Number.parseFloat(produto.precoVenda) || 0
+      quantidade,
+      preco: Number.parseFloat(produto.precoVenda) || 0,
+      estoqueDisponivel: Number(produto.estoque) || 0
     });
   }
   buscaVenda.value = '';
@@ -113,10 +145,20 @@ async function buscarProdutos() {
   resultadosBusca.innerHTML = '';
 
   resultado.produtos.forEach((produto) => {
+    const estoqueInfo = infoEstoque(Number(produto.estoque) || 0);
     const botao = document.createElement('button');
     botao.type = 'button';
     botao.className = 'resultado-produto';
-    botao.innerHTML = `<strong>${produto.nome}</strong><span>Código ${produto.id} · ${dinheiro(produto.precoVenda)} · Estoque: ${produto.estoque}</span>`;
+    botao.innerHTML = `
+      <div class="resultado-produto-principal">
+        <strong>${produto.nome}</strong>
+        <span class="resultado-produto-preco">${dinheiro(produto.precoVenda)}</span>
+      </div>
+      <div class="resultado-produto-secundario">
+        <span>Código ${produto.id}</span>
+        <span class="badge-estoque ${estoqueInfo.classe}">${estoqueInfo.texto}</span>
+      </div>
+    `;
     botao.addEventListener('click', () => adicionarProduto(produto));
     resultadosBusca.appendChild(botao);
   });
@@ -152,9 +194,113 @@ async function buscarClientes() {
   });
 }
 
+async function carregarCatalogo() {
+  const termo = buscaCatalogo.value.trim();
+  const resposta = await fetch(`${API_URL}/produtos?pagina=${paginaCatalogoAtual}&busca=${encodeURIComponent(termo)}`);
+  const resultado = await resposta.json();
+
+  paginaCatalogoAtual = resultado.pagina;
+  totalPaginasCatalogo = resultado.totalPaginas;
+  paginaCatalogoInfo.textContent = `Página ${paginaCatalogoAtual} de ${totalPaginasCatalogo}`;
+  btnCatalogoAnterior.disabled = paginaCatalogoAtual <= 1;
+  btnCatalogoProxima.disabled = paginaCatalogoAtual >= totalPaginasCatalogo;
+
+  grelhaCatalogo.innerHTML = '';
+  catalogoVazio.hidden = resultado.produtos.length > 0;
+
+  resultado.produtos.forEach((produto) => {
+    const estoqueInfo = infoEstoque(Number(produto.estoque) || 0);
+    const linha = document.createElement('div');
+    linha.className = 'produto-catalogo-linha';
+    linha.innerHTML = `
+      <div class="produto-catalogo-info">
+        <span class="produto-catalogo-nome">${produto.nome}</span>
+        <span class="produto-catalogo-codigo">Código ${produto.id}</span>
+      </div>
+      <span class="badge-estoque ${estoqueInfo.classe}">${estoqueInfo.texto}</span>
+      <span class="produto-catalogo-preco">${dinheiro(produto.precoVenda)}</span>
+      <div class="produto-catalogo-acao">
+        <input type="number" min="1" value="1" class="input-quantidade-catalogo" aria-label="Quantidade">
+        <button type="button" class="btn-adicionar-catalogo">Adicionar</button>
+      </div>
+    `;
+
+    const inputQuantidade = linha.querySelector('.input-quantidade-catalogo');
+    const botaoAdicionar = linha.querySelector('.btn-adicionar-catalogo');
+
+    const confirmarAdicao = () => {
+      const quantidade = Math.max(Number.parseInt(inputQuantidade.value, 10) || 1, 1);
+      adicionarProduto(produto, quantidade);
+      mensagemCatalogo.textContent = `${quantidade}x ${produto.nome} adicionado à venda.`;
+      mensagemCatalogo.classList.remove('mensagem-erro');
+      inputQuantidade.value = '1';
+    };
+
+    botaoAdicionar.addEventListener('click', confirmarAdicao);
+    inputQuantidade.addEventListener('keydown', (evento) => {
+      if (evento.key !== 'Enter') return;
+      evento.preventDefault();
+      confirmarAdicao();
+    });
+
+    grelhaCatalogo.appendChild(linha);
+  });
+}
+
+function abrirCatalogo() {
+  modalCatalogo.hidden = false;
+  buscaCatalogo.value = '';
+  mensagemCatalogo.textContent = '';
+  paginaCatalogoAtual = 1;
+  carregarCatalogo();
+  buscaCatalogo.focus();
+}
+
+function fecharCatalogo() {
+  modalCatalogo.hidden = true;
+}
+
+btnAbrirCatalogo.addEventListener('click', abrirCatalogo);
+btnFecharCatalogo.addEventListener('click', fecharCatalogo);
+modalCatalogo.addEventListener('click', (evento) => {
+  if (evento.target === modalCatalogo) fecharCatalogo();
+});
+document.addEventListener('keydown', (evento) => {
+  if (evento.key === 'Escape' && !modalCatalogo.hidden) fecharCatalogo();
+});
+
+buscaCatalogo.addEventListener('input', () => {
+  paginaCatalogoAtual = 1;
+  carregarCatalogo();
+});
+btnCatalogoAnterior.addEventListener('click', () => {
+  if (paginaCatalogoAtual > 1) {
+    paginaCatalogoAtual--;
+    carregarCatalogo();
+  }
+});
+btnCatalogoProxima.addEventListener('click', () => {
+  if (paginaCatalogoAtual < totalPaginasCatalogo) {
+    paginaCatalogoAtual++;
+    carregarCatalogo();
+  }
+});
+
+function selecionarPrimeiraOpcaoAoPressionarEnter(input, container, seletor) {
+  input.addEventListener('keydown', (evento) => {
+    if (evento.key !== 'Enter') return;
+    evento.preventDefault();
+    const primeiraOpcao = container.querySelector(seletor);
+    if (primeiraOpcao) primeiraOpcao.click();
+  });
+}
+
 buscaVenda.addEventListener('input', buscarProdutos);
 clienteVenda.addEventListener('input', buscarClientes);
 descontoVenda.addEventListener('input', atualizarResumo);
+selecionarPrimeiraOpcaoAoPressionarEnter(buscaVenda, resultadosBusca, '.resultado-produto');
+selecionarPrimeiraOpcaoAoPressionarEnter(clienteVenda, resultadosClientes, '.resultado-produto');
+selecionarPrimeiraOpcaoAoPressionarEnter(buscaCatalogo, grelhaCatalogo, '.produto-catalogo-linha .btn-adicionar-catalogo');
 tipoPagamento.addEventListener('change', () => {
   vencimentoVenda.disabled = tipoPagamento.value !== 'futuro';
   if (tipoPagamento.value === 'futuro' && !vencimentoVenda.value) {

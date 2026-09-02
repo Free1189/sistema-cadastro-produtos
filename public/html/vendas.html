@@ -27,7 +27,10 @@
 
       <div class="busca-venda">
         <label for="buscaVenda">Produto</label>
-        <input type="search" id="buscaVenda" placeholder="Busque por nome ou código">
+        <div class="busca-venda-linha">
+          <input type="search" id="buscaVenda" placeholder="Busque por nome ou código">
+          <button type="button" id="btnAbrirCatalogo" class="btn-abrir-catalogo">🗂️ Ver catálogo</button>
+        </div>
         <div id="resultadosBusca" class="resultados-busca"></div>
       </div>
 
@@ -81,6 +84,28 @@
       </div>
     </section>
   </main>
+
+  <div id="modalCatalogo" class="modal-overlay" hidden>
+    <div class="modal-catalogo">
+      <div class="modal-catalogo-header">
+        <div>
+          <p class="hub-kicker">Catálogo</p>
+          <h3>Escolha um produto</h3>
+        </div>
+        <button type="button" id="btnFecharCatalogo" class="btn-fechar-modal" aria-label="Fechar catálogo">✕</button>
+      </div>
+      <input type="search" id="buscaCatalogo" class="input-busca-catalogo" placeholder="Buscar por nome ou código">
+      <p id="mensagemCatalogo" class="mensagem-venda" role="status"></p>
+      <div id="grelhaCatalogo" class="grelha-catalogo"></div>
+      <p id="catalogoVazio" class="estado-vazio" hidden>Nenhum produto encontrado.</p>
+      <div class="paginacao-catalogo">
+        <button type="button" id="btnCatalogoAnterior" class="btn-paginacao-catalogo">‹ Anterior</button>
+        <span id="paginaCatalogoInfo">Página 1</span>
+        <button type="button" id="btnCatalogoProxima" class="btn-paginacao-catalogo">Próxima ›</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/vendas.js"></script>
 </body>
 

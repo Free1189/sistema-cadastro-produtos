@@ -246,12 +246,17 @@ app.get('/clientes', async (req, res) => {
   const busca = String(req.query.busca || '').trim();
 
   try {
-    const resultado = await db.query(
-      `SELECT id, nome, cpf, telefone, cidade, rua, numero, bairro FROM clientes
-       WHERE nome ILIKE $1 OR COALESCE(cpf, '') ILIKE $1
-       ORDER BY nome LIMIT 10`,
-      [`%${busca}%`]
-    );
+    const resultado = busca
+      ? await db.query(
+          `SELECT id, nome, cpf, telefone, cidade, rua, numero, bairro FROM clientes
+           WHERE nome ILIKE $1 OR COALESCE(cpf, '') ILIKE $1 OR similarity(nome, $2) > 0.2
+           ORDER BY similarity(nome, $2) DESC, nome LIMIT 10`,
+          [`%${busca}%`, busca]
+        )
+      : await db.query(
+          `SELECT id, nome, cpf, telefone, cidade, rua, numero, bairro FROM clientes
+           ORDER BY nome LIMIT 10`
+        );
     res.json(resultado.rows);
   } catch (err) {
     console.error(err);
@@ -465,9 +470,6 @@ app.post('/vendas/condicional', async (req, res) => {
           'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE', [item.id]
         );
         if (produto.rowCount === 0) throw new Error(`Produto ${item.id} não encontrado`);
-        if (Number(produto.rows[0].estoque) < item.quantidade) {
-          throw new Error(`Estoque insuficiente para o produto ${item.id}`);
-        }
         await clienteBanco.query('UPDATE produtos SET estoque = estoque - $1 WHERE id = $2', [item.quantidade, item.id]);
       }
     }
@@ -782,8 +784,8 @@ app.put('/vendas/:id/finalizar', async (req, res) => {
       const produto = await clienteBanco.query(
         'SELECT estoque FROM produtos WHERE id = $1 FOR UPDATE', [item.id]
       );
-      if (produto.rowCount === 0 || Number(produto.rows[0].estoque) < item.quantidade) {
-        throw new Error(`Estoque insuficiente para ${item.nome}`);
+      if (produto.rowCount === 0) {
+        throw new Error(`Produto ${item.nome} não encontrado`);
       }
       await clienteBanco.query(
         'UPDATE produtos SET estoque = estoque - $1 WHERE id = $2', [item.quantidade, item.id]
@@ -1504,11 +1506,14 @@ app.get('/produtos', async (req, res) => {
   const busca = String(req.query.busca || '').trim();
   const parametros = [];
   let filtro = '';
+  let ordem = 'id DESC';
 
   if (busca) {
-    parametros.push(`%${busca}%`);
-    filtro = `WHERE nome ILIKE $${parametros.length}
-              OR CAST(id AS TEXT) ILIKE $${parametros.length}`;
+    parametros.push(`%${busca}%`, busca);
+    filtro = `WHERE nome ILIKE $${parametros.length - 1}
+              OR CAST(id AS TEXT) ILIKE $${parametros.length - 1}
+              OR similarity(nome, $${parametros.length}) > 0.2`;
+    ordem = `similarity(nome, $${parametros.length}) DESC, id DESC`;
   }
 
   try {
@@ -1523,7 +1528,7 @@ app.get('/produtos', async (req, res) => {
 
     const resultado = await db.query(
       `SELECT * FROM produtos ${filtro}
-       ORDER BY id DESC LIMIT $${parametros.length + 1} OFFSET $${parametros.length + 2}`,
+       ORDER BY ${ordem} LIMIT $${parametros.length + 1} OFFSET $${parametros.length + 2}`,
       [...parametros, limite, offset]
     );
 
