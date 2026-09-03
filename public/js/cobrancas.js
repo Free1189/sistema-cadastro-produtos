@@ -2,7 +2,7 @@ if (sessionStorage.getItem('autenticado') !== 'true') {
   window.location.href = 'login.html';
 }
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 const listaCobrancas = document.getElementById('listaCobrancas');
 const cobrancasVazio = document.getElementById('cobrancasVazio');
 const quantidadeCobrancas = document.getElementById('quantidadeCobrancas');

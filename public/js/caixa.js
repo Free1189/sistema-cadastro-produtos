@@ -2,7 +2,7 @@ if (sessionStorage.getItem('autenticado') !== 'true') {
   window.location.href = 'login.html';
 }
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 const mensagemCaixa = document.getElementById('mensagemCaixa');
 const listaCaixa = document.getElementById('listaCaixa');
 const caixaVazio = document.getElementById('caixaVazio');

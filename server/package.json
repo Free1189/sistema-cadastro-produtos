@@ -13,9 +13,12 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "cors": "^2.8.6",
+    "bcryptjs": "^3.0.3",
+    "connect-pg-simple": "^10.0.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-session": "^1.19.0",
     "fast-xml-parser": "^5.11.0",
     "multer": "^2.2.0",
     "pdfkit": "^0.19.1",

@@ -5,7 +5,12 @@ if (sessionStorage.getItem('autenticado') !== 'true') {
 const btnSair = document.getElementById('btnSair');
 const hubMensagem = document.getElementById('hubMensagem');
 
-btnSair.addEventListener('click', () => {
+btnSair.addEventListener('click', async () => {
+  try {
+    await fetch('/logout', { method: 'POST' });
+  } catch (erro) {
+    console.error('Erro ao encerrar sessão no servidor:', erro);
+  }
   sessionStorage.removeItem('autenticado');
   sessionStorage.removeItem('perfil');
   window.location.href = 'login.html';

@@ -202,5 +202,16 @@ criarTabelaDespesas.then(() => db.query(`
   WHERE criado_em < '2026-09-01 00:00:00' AND status_pagamento = 'pendente'
 `)).catch((err) => console.error('erro ao preparar tabela despesas', err));
 
+const criarTabelaUsuariosLogin = db.query(`
+  CREATE TABLE IF NOT EXISTS usuarios_login (
+    id SERIAL PRIMARY KEY,
+    usuario VARCHAR(60) UNIQUE NOT NULL,
+    senha_hash VARCHAR(100) NOT NULL,
+    perfil VARCHAR(20) NOT NULL,
+    ativo BOOLEAN NOT NULL DEFAULT true,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )
+`).catch((err) => console.error('erro ao criar tabela usuarios_login', err));
+
 module.exports = db; // exporta a conexão pronta para ser usado no js do front
 

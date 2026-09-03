@@ -1,5 +1,9 @@
+const path = require('path');
 const express = require('express'); //importa as bibliotecas
-const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { XMLParser } = require('fast-xml-parser');
 const PDFDocument = require('pdfkit');
@@ -22,8 +26,43 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();  // cria a aplicação do servidor
-app.use(cors());
+app.use(express.static(path.join(__dirname, '..', 'public'))); // serve o front-end na mesma origem da API
 app.use(express.json()); // ensino o servidor dados JSON
+
+app.use(session({
+  store: new pgSession({ pool: db, createTableIfMissing: true }),
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: false, // servidor local em HTTP; mudar para true se um dia rodar atrás de HTTPS
+    maxAge: 8 * 60 * 60 * 1000 // 8 horas
+  }
+}));
+
+const PUBLIC_PATHS = ['/login', '/logout', '/sessao', '/webhooks/asaas'];
+
+function requireAuth(req, res, next) {
+  if (PUBLIC_PATHS.includes(req.path)) {
+    return next();
+  }
+  if (!req.session?.usuario) {
+    return res.status(401).json({ err: 'Não autenticado' });
+  }
+  next();
+}
+app.use(requireAuth);
+
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { err: 'Muitas tentativas de login. Tente novamente em alguns minutos.' }
+});
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }
@@ -211,35 +250,52 @@ async function avisarQuitacaoVendaAPrazo(vendaId) {
   }
 }
 
-app.post('/login', (req, res) => {
+app.post('/login', loginLimiter, async (req, res) => {
   const { usuario, senha } = req.body;
 
-  const usuarios = [
-    {
-      usuario: process.env.APP_USER_VENDAS,
-      senha: process.env.APP_PASSWORD_VENDAS,
-      perfil: 'vendas'
-    },
-    {
-      usuario: process.env.APP_USER_ADMIN,
-      senha: process.env.APP_PASSWORD_ADMIN,
-      perfil: 'admin'
-    },
-    {
-      usuario: process.env.APP_USER_RELATORIOS,
-      senha: process.env.APP_PASSWORD_RELATORIOS,
-      perfil: 'relatorios'
-    }
-  ];
-  const usuarioEncontrado = usuarios.find(
-    (conta) => conta.usuario === usuario && conta.senha === senha
-  );
-
-  if (usuarioEncontrado) {
-    return res.json({ autenticado: true, perfil: usuarioEncontrado.perfil });
+  if (!usuario || !senha) {
+    return res.status(401).json({ err: 'Usuário ou senha inválidos' });
   }
 
-  res.status(401).json({ err: 'Usuário ou senha inválidos' });
+  try {
+    const resultado = await db.query(
+      'SELECT usuario, senha_hash, perfil FROM usuarios_login WHERE usuario = $1 AND ativo = true',
+      [usuario]
+    );
+    const conta = resultado.rows[0];
+    const senhaValida = conta ? await bcrypt.compare(senha, conta.senha_hash) : false;
+
+    if (!conta || !senhaValida) {
+      return res.status(401).json({ err: 'Usuário ou senha inválidos' });
+    }
+
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Erro ao criar sessão:', err);
+        return res.status(500).json({ err: 'Erro ao criar sessão' });
+      }
+      req.session.usuario = conta.usuario;
+      req.session.perfil = conta.perfil;
+      res.json({ autenticado: true, perfil: conta.perfil });
+    });
+  } catch (err) {
+    console.error('Erro no login:', err);
+    res.status(500).json({ err: 'Erro ao processar login' });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('connect.sid');
+    res.status(204).send();
+  });
+});
+
+app.get('/sessao', (req, res) => {
+  if (!req.session?.usuario) {
+    return res.status(401).json({ autenticado: false });
+  }
+  res.json({ autenticado: true, perfil: req.session.perfil });
 });
 
 app.get('/clientes', async (req, res) => {
@@ -619,11 +675,11 @@ app.get('/vendas', async (req, res) => {
   const periodo = ['dia', 'semana', 'mes'].includes(req.query.periodo) ? req.query.periodo : 'dia';
   const pagina = Math.max(Number.parseInt(req.query.pagina, 10) || 1, 1);
   const limite = 10;
-  const inicio = periodo === 'dia'
-    ? "CURRENT_DATE"
-    : periodo === 'semana'
-      ? "CURRENT_DATE - INTERVAL '6 days'"
-      : "date_trunc('month', CURRENT_DATE)";
+  const inicioSql = `CASE $1
+    WHEN 'dia' THEN CURRENT_DATE
+    WHEN 'semana' THEN CURRENT_DATE - INTERVAL '6 days'
+    ELSE date_trunc('month', CURRENT_DATE)
+  END`;
 
   try {
     const totalResultado = await db.query(
@@ -634,8 +690,9 @@ app.get('/vendas', async (req, res) => {
               COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'cartao_debito'), 0)::numeric AS cartao_debito,
               COALESCE(SUM(total) FILTER (WHERE tipo_pagamento = 'cartao_credito'), 0)::numeric AS cartao_credito
        FROM vendas
-       WHERE criado_em >= ${inicio}
-         AND status = 'finalizada'`
+       WHERE criado_em >= ${inicioSql}
+         AND status = 'finalizada'`,
+      [periodo]
     );
     const quantidade = totalResultado.rows[0].quantidade;
     const totalPaginas = Math.max(Math.ceil(quantidade / limite), 1);
@@ -647,10 +704,10 @@ app.get('/vendas', async (req, res) => {
               data_venda_dia, numero_venda_dia
       FROM vendas
        WHERE status = 'finalizada'
-         AND criado_em >= ${inicio}
+         AND criado_em >= ${inicioSql}
          AND status = 'finalizada'
-       ORDER BY criado_em DESC LIMIT $1 OFFSET $2`,
-      [limite, offset]
+       ORDER BY criado_em DESC LIMIT $2 OFFSET $3`,
+      [periodo, limite, offset]
     );
 
     res.json({
@@ -1176,6 +1233,11 @@ app.post('/cobrancas-prazo/asaas', async (req, res) => {
 });
 
 app.post('/webhooks/asaas', async (req, res) => {
+  const tokenRecebido = req.get('asaas-access-token');
+  if (!tokenRecebido || tokenRecebido !== process.env.ASAAS_WEBHOOK_TOKEN) {
+    return res.status(401).json({ err: 'Token de webhook inválido' });
+  }
+
   const evento = req.body.event;
   const pagamento = req.body.payment;
   const eventosMonitorados = ['PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED', 'PAYMENT_PARTIALLY_RECEIVED'];
@@ -1341,38 +1403,66 @@ app.post('/devolucoes', async (req, res) => {
         throw new Error('Produto ou quantidade inválida');
       }
 
-      const disponibilidade = await clienteBanco.query(
-        `SELECT COALESCE(SUM((item->>'quantidade')::int), 0)::int AS vendido
-         FROM vendas v, jsonb_array_elements(v.itens) item
+      // vendas pendentes do cliente que contêm esse produto, da mais antiga para a mais nova (FIFO),
+      // travadas para evitar corrida com outra devolução/pagamento acontecendo ao mesmo tempo
+      const vendasComProduto = await clienteBanco.query(
+        `SELECT v.id, v.itens, v.subtotal, v.total, v.desconto, v.juros, v.valor_pago
+         FROM vendas v
          WHERE v.cliente_id = $1
            AND v.status = 'finalizada'
            AND v.tipo_pagamento = 'futuro'
            AND v.status_pagamento = 'pendente'
-           AND (item->>'id')::int = $2`, [clienteId, produtoId]
-      );
-      const vendaOrigem = await clienteBanco.query(
-        `SELECT v.id
-         FROM vendas v, jsonb_array_elements(v.itens) item
-         WHERE v.cliente_id = $1
-           AND v.status = 'finalizada'
-           AND v.tipo_pagamento = 'futuro'
-           AND v.status_pagamento = 'pendente'
-           AND (item->>'id')::int = $2
-         ORDER BY v.criado_em ASC LIMIT 1`, [clienteId, produtoId]
-      );
-      if (vendaOrigem.rowCount === 0) throw new Error('Venda de origem não encontrada');
-      const devolvido = await clienteBanco.query(
-        'SELECT COALESCE(SUM(quantidade), 0)::int AS total FROM devolucoes WHERE cliente_id = $1 AND produto_id = $2',
+           AND EXISTS (
+             SELECT 1 FROM jsonb_array_elements(v.itens) it WHERE (it->>'id')::int = $2
+           )
+         ORDER BY v.criado_em ASC
+         FOR UPDATE`,
         [clienteId, produtoId]
       );
-      const disponivel = disponibilidade.rows[0].vendido - devolvido.rows[0].total;
-      if (quantidade > disponivel) throw new Error('Quantidade maior que o disponível para devolução');
+      if (vendasComProduto.rowCount === 0) throw new Error('Venda de origem não encontrada');
+
+      let quantidadeRestante = quantidade;
+
+      for (const venda of vendasComProduto.rows) {
+        if (quantidadeRestante <= 0) break;
+
+        const itemVenda = venda.itens.find((it) => Number(it.id) === produtoId);
+        if (!itemVenda) continue;
+
+        const jaDevolvido = await clienteBanco.query(
+          'SELECT COALESCE(SUM(quantidade), 0)::int AS total FROM devolucoes WHERE venda_id = $1 AND produto_id = $2',
+          [venda.id, produtoId]
+        );
+        const disponivelNaVenda = (Number(itemVenda.quantidade) || 0) - jaDevolvido.rows[0].total;
+        if (disponivelNaVenda <= 0) continue;
+
+        const qtdAlocada = Math.min(disponivelNaVenda, quantidadeRestante);
+        const valorUnitario = Number(itemVenda.preco) || 0;
+        const valorSubtotal = qtdAlocada * valorUnitario;
+        const percentualDesconto = Number(venda.desconto) || 0;
+        const valorTotal = valorSubtotal * (1 - percentualDesconto / 100);
+
+        await clienteBanco.query(
+          'INSERT INTO devolucoes (cliente_id, venda_id, produto_id, quantidade) VALUES ($1, $2, $3, $4)',
+          [clienteId, venda.id, produtoId, qtdAlocada]
+        );
+        await clienteBanco.query(
+          `UPDATE vendas
+           SET subtotal = GREATEST(subtotal - $1, 0),
+               total = GREATEST(total - $2, 0),
+               saldo_devedor = GREATEST(GREATEST(total - $2, 0) + juros - valor_pago, 0)
+           WHERE id = $3`,
+          [valorSubtotal, valorTotal, venda.id]
+        );
+
+        quantidadeRestante -= qtdAlocada;
+      }
+
+      if (quantidadeRestante > 0) {
+        throw new Error('Quantidade maior que o disponível para devolução');
+      }
 
       await clienteBanco.query('UPDATE produtos SET estoque = estoque + $1 WHERE id = $2', [quantidade, produtoId]);
-      await clienteBanco.query(
-        'INSERT INTO devolucoes (cliente_id, venda_id, produto_id, quantidade) VALUES ($1, $2, $3, $4)',
-        [clienteId, vendaOrigem.rows[0].id, produtoId, quantidade]
-      );
     }
 
     const restante = await clienteBanco.query(

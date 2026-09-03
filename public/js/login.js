@@ -1,5 +1,16 @@
 const loginForm = document.getElementById('loginForm');
 const mensagemLogin = document.getElementById('mensagemLogin');
+const campoUsuario = document.getElementById('usuario');
+const campoSenha = document.getElementById('senha');
+
+campoUsuario.addEventListener('keydown', (evento) => {
+  if (evento.key === 'Enter') {
+    evento.preventDefault();
+    campoSenha.focus();
+  }
+});
+
+campoUsuario.focus();
 
 loginForm.addEventListener('submit', async (evento) => {
   evento.preventDefault();
@@ -9,7 +20,7 @@ loginForm.addEventListener('submit', async (evento) => {
   const senha = document.getElementById('senha').value;
 
   try {
-    const resposta = await fetch('http://localhost:3000/login', {
+    const resposta = await fetch('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, senha })

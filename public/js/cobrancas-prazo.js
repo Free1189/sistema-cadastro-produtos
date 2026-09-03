@@ -1,6 +1,6 @@
 if (sessionStorage.getItem('autenticado') !== 'true') window.location.href = 'login.html';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 const lista = document.getElementById('listaClientesPrazo');
 const vazio = document.getElementById('prazoVazio');
 const mensagem = document.getElementById('mensagemPrazo');

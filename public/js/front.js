@@ -146,7 +146,7 @@ function calcularPrecoVenda() {
 
 
 
-const API_URL = 'http://localhost:3000/produtos';
+const API_URL = '/produtos';
 const importarXmlForm = document.getElementById('importarXmlForm');
 const arquivoXml = document.getElementById('arquivoXml');
 const codigoNfce = document.getElementById('codigoNfce');
@@ -245,7 +245,7 @@ importarXmlForm.addEventListener('submit', async (e) => {
   dados.append('codigoNfce', chaveNfce);
 
   try {
-    const resposta = await fetch('http://localhost:3000/notas/importar', {
+    const resposta = await fetch('/notas/importar', {
       method: 'POST',
       body: dados
     });
@@ -290,8 +290,8 @@ form.addEventListener('submit', async (e) => {
   };
 
   const url = idEditando
-    ? `http://localhost:3000/produtos/${idEditando}`
-    : 'http://localhost:3000/produtos';
+    ? `/produtos/${idEditando}`
+    : '/produtos';
 
   const metodo = idEditando ? 'PUT' : 'POST';
 
@@ -316,7 +316,7 @@ form.addEventListener('submit', async (e) => {
 async function excluirProduto(id) {
   if (confirm("Tem certeza que deseja excluir produto?")) {
     try {
-      const res = await fetch(`http://localhost:3000/produtos/${id}`, {
+      const res = await fetch(`/produtos/${id}`, {
         method: 'DELETE'
       });
 

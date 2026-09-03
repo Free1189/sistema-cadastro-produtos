@@ -1,6 +1,6 @@
 if (sessionStorage.getItem('autenticado') !== 'true') window.location.href = 'login.html';
 
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 const cobrancaId = new URLSearchParams(window.location.search).get('id');
 
 const mensagemDetalhe = document.getElementById('mensagemDetalhe');
