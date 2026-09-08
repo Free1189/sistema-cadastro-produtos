@@ -8,6 +8,27 @@ const quantidadeClientes = document.getElementById('quantidadeClientes');
 
 function dinheiro(valor) { return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 
+function montarDetalheProdutos(itens) {
+  return (itens || []).map((item) => {
+    const quantidadeLiquida = item.quantidadeLiquida ?? item.quantidade;
+    const subtotalLiquido = quantidadeLiquida * Number(item.preco || 0);
+    const devolvidoInfo = item.devolvido > 0
+      ? `<span class="produto-detalhe-prazo-devolvido">${item.devolvido}x devolvido(s)</span>`
+      : '';
+    return `
+      <div class="produto-detalhe-prazo-linha">
+        <div class="produto-detalhe-prazo-info">
+          <span class="produto-detalhe-prazo-nome">${item.nome}</span>
+          <span class="produto-detalhe-prazo-codigo">Código ${item.id} · ${dinheiro(item.preco)} cada</span>
+          ${devolvidoInfo}
+        </div>
+        <span class="produto-detalhe-prazo-qtd">${quantidadeLiquida}x</span>
+        <span class="produto-detalhe-prazo-preco">${dinheiro(subtotalLiquido)}</span>
+      </div>
+    `;
+  }).join('');
+}
+
 function normalizarDataVencimento(vencimento) {
   if (!vencimento) return null;
   const bruto = String(vencimento);
@@ -85,6 +106,9 @@ async function carregar() {
       const dataVencimento = normalizarDataVencimento(venda.vencimento);
       const data = dataVencimento ? dataVencimento.toLocaleDateString('pt-BR') : 'Sem vencimento';
       const atraso = infoAtraso(venda.vencimento);
+      const itemContainer = document.createElement('div');
+      itemContainer.className = 'venda-prazo-item';
+
       const linha = document.createElement('label');
       linha.className = 'venda-prazo-linha';
       linha.dataset.total = Number(venda.valor_aberto ?? (Number(venda.total) + Number(venda.juros)));
@@ -93,9 +117,30 @@ async function carregar() {
         <span>Compra do dia ${venda.numero_venda_dia || '-'} · ${data}</span>
         <b>${dinheiro(venda.valor_aberto ?? (Number(venda.total) + Number(venda.juros)))}</b>
         <small class="status-vencimento ${atraso.classe}">${atraso.texto}</small>
-        <small><span class="texto-subtraido">Subtraído: ${dinheiro(venda.valor_pago || 0)}</span> · ${(venda.itens || []).map((item) => `${item.quantidade}x ${item.nome}`).join(', ')}</small>
+        <small><span class="texto-subtraido">Subtraído: ${dinheiro(venda.valor_pago || 0)}</span></small>
       `;
-      card.appendChild(linha);
+
+      const botaoProdutos = document.createElement('button');
+      botaoProdutos.type = 'button';
+      botaoProdutos.className = 'btn-ver-produtos-prazo';
+      botaoProdutos.textContent = `🗂️ Ver produtos (${(venda.itens || []).length})`;
+
+      const detalhe = document.createElement('div');
+      detalhe.className = 'detalhe-produtos-prazo';
+      detalhe.hidden = true;
+      detalhe.innerHTML = montarDetalheProdutos(venda.itens);
+
+      botaoProdutos.addEventListener('click', (evento) => {
+        evento.preventDefault();
+        evento.stopPropagation();
+        detalhe.hidden = !detalhe.hidden;
+        botaoProdutos.classList.toggle('aberto', !detalhe.hidden);
+      });
+
+      itemContainer.appendChild(linha);
+      itemContainer.appendChild(botaoProdutos);
+      itemContainer.appendChild(detalhe);
+      card.appendChild(itemContainer);
     });
 
     const acoes = document.createElement('div');

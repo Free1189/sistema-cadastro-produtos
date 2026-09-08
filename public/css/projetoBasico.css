@@ -604,13 +604,21 @@ html.perfil-relatorios .hub-secao-operacional {
   font-size: 12px;
 }
 
+.venda-prazo-item {
+  padding: 10px 0;
+  border-top: 1px solid #eef2f5;
+}
+
+.venda-prazo-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
 .venda-prazo-linha {
   display: grid;
   grid-template-columns: 24px minmax(180px, 1fr) 130px;
   gap: 8px 12px;
   align-items: center;
-  padding: 10px 0;
-  border-top: 1px solid #eef2f5;
   cursor: pointer;
 }
 
@@ -621,6 +629,79 @@ html.perfil-relatorios .hub-secao-operacional {
 
 .venda-prazo-linha small {
   grid-column: 2 / -1;
+}
+
+.btn-ver-produtos-prazo {
+  margin: 8px 0 0 36px;
+  padding: 5px 12px;
+  color: var(--cor-azul-escuro);
+  background-color: #f1f6fb;
+  border: 1px solid #cfe0ef;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-ver-produtos-prazo:hover,
+.btn-ver-produtos-prazo.aberto {
+  background-color: #e3edf7;
+  border-color: var(--cor-azul);
+}
+
+.detalhe-produtos-prazo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0 36px;
+}
+
+.produto-detalhe-prazo-linha {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: #f8fafb;
+  border: 1px solid #eef2f5;
+  border-radius: 6px;
+}
+
+.produto-detalhe-prazo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.produto-detalhe-prazo-nome {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--cor-fundo-preto);
+}
+
+.produto-detalhe-prazo-codigo {
+  font-size: 11px;
+  color: #68737d;
+}
+
+.produto-detalhe-prazo-devolvido {
+  font-size: 11px;
+  font-weight: bold;
+  color: #b42318;
+}
+
+.produto-detalhe-prazo-qtd {
+  font-size: 12px;
+  color: #68737d;
+  white-space: nowrap;
+}
+
+.produto-detalhe-prazo-preco {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--cor-azul-escuro);
+  text-align: right;
+  white-space: nowrap;
 }
 
 .status-vencimento {

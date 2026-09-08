@@ -1166,8 +1166,27 @@ app.get('/cobrancas-prazo', async (req, res) => {
          AND v.status_pagamento = 'pendente'
        ORDER BY v.cliente_nome, v.criado_em ASC`
     );
+    const vendaIds = resultado.rows.map((venda) => venda.id);
+    const devolucoesResultado = vendaIds.length
+      ? await db.query(
+          `SELECT venda_id, produto_id, SUM(quantidade)::int AS quantidade
+           FROM devolucoes
+           WHERE venda_id = ANY($1::int[])
+           GROUP BY venda_id, produto_id`,
+          [vendaIds]
+        )
+      : { rows: [] };
+    const mapaDevolvido = new Map(
+      devolucoesResultado.rows.map((item) => [`${item.venda_id}:${item.produto_id}`, item.quantidade])
+    );
+
     const clientes = new Map();
     for (const venda of resultado.rows) {
+      venda.itens = (venda.itens || []).map((item) => {
+        const devolvido = mapaDevolvido.get(`${venda.id}:${item.id}`) || 0;
+        return { ...item, devolvido, quantidadeLiquida: Math.max((Number(item.quantidade) || 0) - devolvido, 0) };
+      });
+
       if (!clientes.has(venda.cliente_id)) {
         clientes.set(venda.cliente_id, { id: venda.cliente_id, nome: venda.cliente_nome, vendas: [] });
       }
